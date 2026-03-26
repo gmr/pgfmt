@@ -53,6 +53,7 @@ class Formatter(abc.ABC):
             The formatted SQL string.
 
         """
+        self._source_sql = sql
         statements = pgparse.parse(sql)
         results = []
         for stmt_wrapper in statements:
@@ -636,8 +637,7 @@ class Formatter(abc.ABC):
             return ', '.join(self.deparse(i) for i in items)
         return self.deparse(node)
 
-    @staticmethod
-    def _join_keyword(node: dict) -> str:
+    def _join_keyword(self, node: dict) -> str:
         join_type = node.get('jointype', 'JOIN_INNER')
         is_natural = node.get('isNatural', False)
         prefix = 'NATURAL ' if is_natural else ''
@@ -645,6 +645,8 @@ class Formatter(abc.ABC):
             case 'JOIN_INNER':
                 if node.get('quals') is None and not is_natural:
                     return f'{prefix}CROSS JOIN'
+                if self._is_plain_join(node):
+                    return f'{prefix}JOIN'
                 return f'{prefix}INNER JOIN'
             case 'JOIN_LEFT':
                 return f'{prefix}LEFT JOIN'
@@ -654,6 +656,39 @@ class Formatter(abc.ABC):
                 return f'{prefix}FULL JOIN'
             case _:
                 return f'{prefix}JOIN'
+
+    def _is_plain_join(self, node: dict) -> bool:
+        """Check the source SQL to see if JOIN was written without INNER."""
+        source = getattr(self, '_source_sql', None)
+        if not source:
+            return False
+        larg_loc = self._rightmost_location(node.get('larg', {}))
+        rarg_loc = self._leftmost_location(node.get('rarg', {}))
+        if larg_loc < 0 or rarg_loc < 0:
+            return False
+        between = source[larg_loc:rarg_loc].upper()
+        return ' JOIN ' in between and ' INNER ' not in between
+
+    @staticmethod
+    def _leftmost_location(node: dict) -> int:
+        if not isinstance(node, dict):
+            return -1
+        for value in node.values():
+            if isinstance(value, dict) and 'location' in value:
+                return value['location']
+        return -1
+
+    @staticmethod
+    def _rightmost_location(node: dict) -> int:
+        if not isinstance(node, dict):
+            return -1
+        for value in node.values():
+            if isinstance(value, dict):
+                loc = value.get('location', -1)
+                name = value.get('relname', '')
+                if loc >= 0:
+                    return loc + len(name)
+        return -1
 
     @staticmethod
     def _flatten_bool_expr(

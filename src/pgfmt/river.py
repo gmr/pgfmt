@@ -502,10 +502,12 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         node: dict,
         keywords: list[str],
     ) -> None:
-        """Walk JoinExpr tree without adding join keywords to the river."""
         if 'JoinExpr' not in node:
             return
         join = node['JoinExpr']
+        if not self._is_qualified_join(join):
+            keywords.append(self._join_keyword(join))
+            keywords.append('ON')
         self._collect_join_keywords(join['larg'], keywords)
         if 'JoinExpr' in join.get('rarg', {}):
             self._collect_join_keywords(
@@ -587,9 +589,9 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         else:
             items.append(('FROM', self.deparse(node), None, False))
 
-    @staticmethod
-    def _is_qualified_join(_join: dict) -> bool:
-        return True
+    def _is_qualified_join(self, join: dict) -> bool:
+        kw = self._join_keyword(join)
+        return kw not in ('JOIN', 'NATURAL JOIN')
 
     def _format_join_on(self, quals, pad, lines):
         """Format ON/AND for a qualified join."""

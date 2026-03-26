@@ -85,6 +85,12 @@ class Formatter(abc.ABC):
                 return self.format_view(node)
             case 'CreateStmt':
                 return self.format_create_table(node)
+            case 'CreateForeignTableStmt':
+                return self.format_create_table(
+                    node['base'],
+                    foreign_server=node.get('servername'),
+                    foreign_options=node.get('options'),
+                )
             case 'CreateTableAsStmt':
                 return self.format_create_table_as(node)
             case 'CreateFunctionStmt':
@@ -117,8 +123,14 @@ class Formatter(abc.ABC):
         """Format a CREATE VIEW statement."""
 
     @abc.abstractmethod
-    def format_create_table(self, node: dict) -> str:
-        """Format a CREATE TABLE statement."""
+    def format_create_table(
+        self,
+        node: dict,
+        *,
+        foreign_server: str | None = None,
+        foreign_options: list | None = None,
+    ) -> str:
+        """Format a CREATE TABLE or CREATE FOREIGN TABLE."""
 
     def format_create_table_as(self, node: dict) -> str:
         """Format CREATE TABLE AS or CREATE MATERIALIZED VIEW AS."""
@@ -646,6 +658,7 @@ class Formatter(abc.ABC):
     def _deparse_storage_options(
         self,
         options: list[dict],
+        separator: str = ', ',
     ) -> str:
         parts = []
         for opt in options:
@@ -663,7 +676,24 @@ class Formatter(abc.ABC):
                 parts.append(f'{name}={val}')
             else:
                 parts.append(name)
-        return ', '.join(parts)
+        return separator.join(parts)
+
+    @staticmethod
+    def _format_foreign_options(
+        options: list[dict],
+        indent: str,
+    ) -> str:
+        parts = []
+        for opt in options:
+            elem = opt['DefElem']
+            name = elem['defname']
+            arg = elem.get('arg')
+            if arg and 'String' in arg:
+                val = arg['String']['sval']
+                parts.append(f"{indent}{name} '{val}'")
+            else:
+                parts.append(f'{indent}{name}')
+        return ',\n'.join(parts)
 
     @staticmethod
     def _deparse_sql_value_function(node: dict) -> str:

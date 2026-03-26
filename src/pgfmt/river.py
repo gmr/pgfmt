@@ -242,7 +242,13 @@ class RiverFormatter(pgfmt.formatter.Formatter):
 
         return '\n'.join(lines)
 
-    def format_create_table(self, node: dict) -> str:
+    def format_create_table(
+        self,
+        node: dict,
+        *,
+        foreign_server: str | None = None,
+        foreign_options: list | None = None,
+    ) -> str:
         relation = node['relation']
         name = self._deparse_range_var(
             relation,
@@ -250,6 +256,7 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         )
         elts = node.get('tableElts', [])
         options = node.get('options')
+        prefix = 'CREATE FOREIGN TABLE' if foreign_server else 'CREATE TABLE'
 
         columns = []
         pk_constraints = []
@@ -290,7 +297,7 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         for cons in other_constraints:
             ordered.extend(self._format_table_constraint(cons, type_col))
 
-        lines = [f'CREATE TABLE {name} (']
+        lines = [f'{prefix} {name} (']
         for i, item in enumerate(ordered):
             is_last = i == len(ordered) - 1
             next_is_continuation = not is_last and ordered[
@@ -305,6 +312,16 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         if options:
             opts = self._deparse_storage_options(options)
             lines[-1] += f'\nWITH ({opts})'
+
+        if foreign_server:
+            lines.append(f'SERVER {foreign_server}')
+
+        if foreign_options:
+            opt_lines = self._format_foreign_options(
+                foreign_options,
+                '    ',
+            )
+            lines.append(f'OPTIONS (\n{opt_lines}\n)')
 
         return '\n'.join(lines)
 

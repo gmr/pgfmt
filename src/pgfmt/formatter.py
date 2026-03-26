@@ -214,17 +214,18 @@ class Formatter(abc.ABC):
         return '\n'.join(lines)
 
     def _passthrough(self, wrapper: dict | None) -> str:
-        """Return the original SQL for unsupported statement types."""
+        """Return the original SQL normalized to a single line."""
         source = getattr(self, '_source_sql', '')
         if not wrapper or not source:
-            return source.strip().rstrip(';')
-        loc = wrapper.get('stmt_location', 0)
-        length = wrapper.get('stmt_len', 0)
-        if length > 0:
-            text = source[loc : loc + length]
+            text = source
         else:
-            text = source[loc:]
-        return text.strip().rstrip(';')
+            loc = wrapper.get('stmt_location', 0)
+            length = wrapper.get('stmt_len', 0)
+            if length > 0:
+                text = source[loc : loc + length]
+            else:
+                text = source[loc:]
+        return ' '.join(text.split()).rstrip(';')
 
     def _format_create_domain(self, node: dict) -> str:
         name = '.'.join(self._extract_names(node.get('domainname', [])))

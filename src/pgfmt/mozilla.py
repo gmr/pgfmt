@@ -60,7 +60,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         from_clause = node.get('fromClause', [])
         if from_clause:
             from_items = self._flatten_from(from_clause)
-            for kw, table, quals in from_items:
+            for kw, table, quals, using in from_items:
                 has_joins = len(from_items) > 1
                 if kw == 'FROM' and not has_joins:
                     lines.append(f'FROM {table}')
@@ -72,6 +72,12 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                     lines.append(f'{INDENT}{table}')
                 if quals is not None:
                     self._format_on(quals, lines)
+                if using is not None:
+                    cols = ', '.join(self._extract_names(using))
+                    self._append_indented(
+                        f'USING ({cols})',
+                        lines,
+                    )
 
         where = node.get('whereClause')
         if where:
@@ -323,8 +329,8 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
     def _flatten_from(
         self,
         from_clause: list[dict],
-    ) -> list[tuple[str, str, dict | None]]:
-        items: list[tuple[str, str, dict | None]] = []
+    ) -> list:
+        items = []
         for node in from_clause:
             self._flatten_from_node(
                 node,
@@ -336,7 +342,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
     def _flatten_from_node(
         self,
         node: dict,
-        items: list[tuple[str, str, dict | None]],
+        items: list,
         is_first: bool = False,
     ) -> None:
         if 'JoinExpr' in node:
@@ -349,9 +355,10 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             kw = self._join_keyword(join)
             right = self.deparse(join['rarg'])
             quals = join.get('quals')
-            items.append((kw, right, quals))
+            using = join.get('usingClause')
+            items.append((kw, right, quals, using))
         else:
-            items.append(('FROM', self.deparse(node), None))
+            items.append(('FROM', self.deparse(node), None, None))
 
     @staticmethod
     def _set_op_keyword(node: dict) -> str:

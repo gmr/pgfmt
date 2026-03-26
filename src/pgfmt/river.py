@@ -40,11 +40,21 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             for kw, content, quals in from_items:
                 lines.append(self._river_line(kw, content, width))
                 if quals is not None:
-                    self._format_condition_clause('ON', quals, width, lines)
+                    self._format_condition_clause(
+                        'ON',
+                        quals,
+                        width,
+                        lines,
+                    )
 
         where = node.get('whereClause')
         if where:
-            self._format_condition_clause('WHERE', where, width, lines)
+            self._format_condition_clause(
+                'WHERE',
+                where,
+                width,
+                lines,
+            )
 
         group = node.get('groupClause')
         if group:
@@ -53,7 +63,12 @@ class RiverFormatter(pgfmt.formatter.Formatter):
 
         having = node.get('havingClause')
         if having:
-            self._format_condition_clause('HAVING', having, width, lines)
+            self._format_condition_clause(
+                'HAVING',
+                having,
+                width,
+                lines,
+            )
 
         sort = node.get('sortClause')
         if sort:
@@ -62,19 +77,31 @@ class RiverFormatter(pgfmt.formatter.Formatter):
 
         limit = node.get('limitCount')
         if limit:
-            lines.append(self._river_line('LIMIT', self.deparse(limit), width))
+            lines.append(
+                self._river_line(
+                    'LIMIT',
+                    self.deparse(limit),
+                    width,
+                )
+            )
 
         offset = node.get('limitOffset')
         if offset:
             lines.append(
-                self._river_line('OFFSET', self.deparse(offset), width)
+                self._river_line(
+                    'OFFSET',
+                    self.deparse(offset),
+                    width,
+                )
             )
 
-        return '\n'.join(f'{prefix}{line}' for line in lines)
+        raw = '\n'.join(lines)
+        return '\n'.join(f'{prefix}{line}' for line in raw.split('\n'))
 
     def format_insert(self, node: dict) -> str:
         relation = self._deparse_range_var(
-            node['relation'], include_alias=False
+            node['relation'],
+            include_alias=False,
         )
         cols = node.get('cols', [])
         select_stmt = node.get('selectStmt', {})
@@ -106,16 +133,25 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                 items = vl['List']['items']
                 vals = ', '.join(self.deparse(v) for v in items)
                 rows.append(f'({vals})')
-            self._append_comma_list('VALUES', rows, width, lines)
+            self._append_comma_list(
+                'VALUES',
+                rows,
+                width,
+                lines,
+            )
         else:
-            inner = self.format_select(select, indent=width + 1)
+            inner = self.format_select(
+                select,
+                indent=width + 1,
+            )
             lines.append(inner)
 
         return '\n'.join(lines)
 
     def format_update(self, node: dict) -> str:
         relation = self._deparse_range_var(
-            node['relation'], include_alias=False
+            node['relation'],
+            include_alias=False,
         )
         targets = node.get('targetList', [])
         where = node.get('whereClause')
@@ -136,13 +172,19 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         self._append_comma_list('SET', set_items, width, lines)
 
         if where:
-            self._format_condition_clause('WHERE', where, width, lines)
+            self._format_condition_clause(
+                'WHERE',
+                where,
+                width,
+                lines,
+            )
 
         return '\n'.join(lines)
 
     def format_delete(self, node: dict) -> str:
         relation = self._deparse_range_var(
-            node['relation'], include_alias=False
+            node['relation'],
+            include_alias=False,
         )
         where = node.get('whereClause')
 
@@ -157,9 +199,53 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         lines.append(self._river_line('FROM', relation, width))
 
         if where:
-            self._format_condition_clause('WHERE', where, width, lines)
+            self._format_condition_clause(
+                'WHERE',
+                where,
+                width,
+                lines,
+            )
 
         return '\n'.join(lines)
+
+    # ------------------------------------------------------------------
+    # Subquery formatting
+    # ------------------------------------------------------------------
+
+    def _deparse_sub_link(self, node: dict) -> str:
+        sub_type = node.get('subLinkType', '')
+        subselect = node['subselect']
+        inner_node = subselect.get('SelectStmt', subselect)
+        inner = self.format_select(inner_node)
+
+        match sub_type:
+            case 'EXISTS_SUBLINK':
+                return self._indent_continuation(
+                    'EXISTS (',
+                    inner,
+                    ')',
+                )
+            case 'ANY_SUBLINK':
+                test = self.deparse(node.get('testexpr'))
+                return self._indent_continuation(
+                    f'{test} IN (',
+                    inner,
+                    ')',
+                )
+            case 'ALL_SUBLINK':
+                test = self.deparse(node.get('testexpr'))
+                op = self._get_operator(node.get('operName', []))
+                return self._indent_continuation(
+                    f'{test} {op} ALL (',
+                    inner,
+                    ')',
+                )
+            case _:
+                return self._indent_continuation(
+                    '(',
+                    inner,
+                    ')',
+                )
 
     # ------------------------------------------------------------------
     # River formatting helpers
@@ -167,9 +253,17 @@ class RiverFormatter(pgfmt.formatter.Formatter):
 
     @staticmethod
     def _river_line(keyword: str, content: str, width: int) -> str:
-        if content:
-            return f'{keyword:>{width}} {content}'
-        return f'{keyword:>{width}}'
+        if not content:
+            return f'{keyword:>{width}}'
+        first_prefix = f'{keyword:>{width}} '
+        if '\n' not in content:
+            return f'{first_prefix}{content}'
+        lines = content.split('\n')
+        pad = ' ' * (width + 1)
+        result = [f'{first_prefix}{lines[0]}']
+        for line in lines[1:]:
+            result.append(f'{pad}{line}')
+        return '\n'.join(result)
 
     def _append_comma_list(
         self,
@@ -178,7 +272,7 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         width: int,
         lines: list[str],
     ) -> None:
-        """Append a keyword + comma-separated items with continuation."""
+        """Append a keyword + comma-separated items."""
         first = items[0]
         if len(items) > 1:
             first += ','
@@ -186,7 +280,28 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         content_indent = ' ' * (width + 1)
         for i, item in enumerate(items[1:], 1):
             suffix = ',' if i < len(items) - 1 else ''
-            lines.append(f'{content_indent}{item}{suffix}')
+            self._append_multiline_item(
+                item,
+                suffix,
+                content_indent,
+                lines,
+            )
+
+    @staticmethod
+    def _append_multiline_item(
+        item: str,
+        suffix: str,
+        indent: str,
+        lines: list[str],
+    ) -> None:
+        if '\n' not in item:
+            lines.append(f'{indent}{item}{suffix}')
+            return
+        sub_lines = item.split('\n')
+        lines.append(f'{indent}{sub_lines[0]}')
+        for sub_line in sub_lines[1:-1]:
+            lines.append(f'{indent}{sub_line}')
+        lines.append(f'{indent}{sub_lines[-1]}{suffix}')
 
     def _collect_select_keywords(self, node: dict) -> list[str]:
         keywords = ['SELECT']
@@ -227,7 +342,10 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                 self._collect_condition_keywords(quals, keywords)
             self._collect_join_keywords(join['larg'], keywords)
             if 'JoinExpr' in join.get('rarg', {}):
-                self._collect_join_keywords(join['rarg'], keywords)
+                self._collect_join_keywords(
+                    join['rarg'],
+                    keywords,
+                )
 
     @staticmethod
     def _collect_condition_keywords(
@@ -278,7 +396,11 @@ class RiverFormatter(pgfmt.formatter.Formatter):
     ) -> list[tuple[str, str, dict | None]]:
         items: list[tuple[str, str, dict | None]] = []
         for node in from_clause:
-            self._flatten_from_node(node, items, is_first=not items)
+            self._flatten_from_node(
+                node,
+                items,
+                is_first=not items,
+            )
         return items
 
     def _flatten_from_node(

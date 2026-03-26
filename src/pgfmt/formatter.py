@@ -226,7 +226,8 @@ class Formatter(abc.ABC):
         boolop = node['boolop']
         args = node['args']
         if boolop == 'NOT_EXPR':
-            return f'NOT ({self.deparse(args[0])})'
+            inner = self.deparse(args[0])
+            return self._indent_continuation('NOT (', inner, ')')
         op = ' AND ' if boolop == 'AND_EXPR' else ' OR '
         parts = []
         for arg in args:
@@ -384,6 +385,10 @@ class Formatter(abc.ABC):
         val = self.deparse(node.get('val'))
         name = node.get('name')
         if name:
+            if '\n' in val:
+                lines = val.split('\n')
+                lines[-1] += f' AS {name}'
+                return '\n'.join(lines)
             return f'{val} AS {name}'
         return val
 
@@ -414,6 +419,28 @@ class Formatter(abc.ABC):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _indent_continuation(
+        prefix: str,
+        content: str,
+        suffix: str = '',
+    ) -> str:
+        """Indent continuation lines of multi-line content.
+
+        The first line is prefixed with ``prefix``. Subsequent lines
+        are padded to align with the character after the prefix.
+        ``suffix`` is appended to the last line.
+        """
+        if '\n' not in content:
+            return f'{prefix}{content}{suffix}'
+        lines = content.split('\n')
+        pad = ' ' * len(prefix)
+        result = [f'{prefix}{lines[0]}']
+        for line in lines[1:]:
+            result.append(f'{pad}{line}')
+        result[-1] += suffix
+        return '\n'.join(result)
 
     @staticmethod
     def _extract_names(nodes: list[dict]) -> list[str]:

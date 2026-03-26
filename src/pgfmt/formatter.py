@@ -292,9 +292,16 @@ class Formatter(abc.ABC):
 
     def _deparse_type_name(self, node: dict) -> str:
         name_parts = self._extract_names(node.get('names', []))
-        # pg_catalog prefix maps to SQL-standard type names
         if len(name_parts) == 2 and name_parts[0] == 'pg_catalog':
-            name = PG_TYPE_MAP.get(name_parts[1], name_parts[1].upper())
+            name = PG_TYPE_MAP.get(
+                name_parts[1],
+                name_parts[1].upper(),
+            )
+        elif len(name_parts) == 1:
+            name = PG_TYPE_MAP.get(
+                name_parts[0],
+                name_parts[0].upper(),
+            )
         else:
             name = '.'.join(name_parts)
         typmods = node.get('typmods', [])

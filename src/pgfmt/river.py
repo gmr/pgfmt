@@ -42,15 +42,29 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         from_clause = node.get('fromClause', [])
         if from_clause:
             from_items = self._flatten_from(from_clause)
-            for kw, content, quals in from_items:
-                lines.append(self._river_line(kw, content, width))
-                if quals is not None:
-                    self._format_condition_clause(
-                        'ON',
-                        quals,
-                        width,
-                        lines,
-                    )
+            content_pad = ' ' * (width + 1)
+            for idx, (kw, table, quals, is_qualified) in enumerate(
+                from_items,
+            ):
+                if not is_qualified:
+                    lines.append(self._river_line(kw, table, width))
+                    if quals is not None:
+                        self._format_condition_clause(
+                            'ON',
+                            quals,
+                            width,
+                            lines,
+                        )
+                else:
+                    if idx > 1:
+                        lines.append('')
+                    lines.append(f'{content_pad}{kw} {table}')
+                    if quals is not None:
+                        self._format_join_on(
+                            quals,
+                            content_pad,
+                            lines,
+                        )
 
         where = node.get('whereClause')
         if where:
@@ -488,19 +502,16 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         node: dict,
         keywords: list[str],
     ) -> None:
-        if 'JoinExpr' in node:
-            join = node['JoinExpr']
-            keywords.append(self._join_keyword(join))
-            keywords.append('ON')
-            quals = join.get('quals')
-            if quals:
-                self._collect_condition_keywords(quals, keywords)
-            self._collect_join_keywords(join['larg'], keywords)
-            if 'JoinExpr' in join.get('rarg', {}):
-                self._collect_join_keywords(
-                    join['rarg'],
-                    keywords,
-                )
+        """Walk JoinExpr tree without adding join keywords to the river."""
+        if 'JoinExpr' not in node:
+            return
+        join = node['JoinExpr']
+        self._collect_join_keywords(join['larg'], keywords)
+        if 'JoinExpr' in join.get('rarg', {}):
+            self._collect_join_keywords(
+                join['rarg'],
+                keywords,
+            )
 
     @staticmethod
     def _collect_condition_keywords(
@@ -545,11 +556,8 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                 return
         lines.append(self._river_line(keyword, self.deparse(node), width))
 
-    def _flatten_from(
-        self,
-        from_clause: list[dict],
-    ) -> list[tuple[str, str, dict | None]]:
-        items: list[tuple[str, str, dict | None]] = []
+    def _flatten_from(self, from_clause):
+        items = []
         for node in from_clause:
             self._flatten_from_node(
                 node,
@@ -560,10 +568,10 @@ class RiverFormatter(pgfmt.formatter.Formatter):
 
     def _flatten_from_node(
         self,
-        node: dict,
-        items: list[tuple[str, str, dict | None]],
-        is_first: bool = False,
-    ) -> None:
+        node,
+        items,
+        is_first=False,
+    ):
         if 'JoinExpr' in node:
             join = node['JoinExpr']
             self._flatten_from_node(
@@ -574,9 +582,32 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             kw = self._join_keyword(join)
             right = self.deparse(join['rarg'])
             quals = join.get('quals')
-            items.append((kw, right, quals))
+            qualified = self._is_qualified_join(join)
+            items.append((kw, right, quals, qualified))
         else:
-            items.append(('FROM', self.deparse(node), None))
+            items.append(('FROM', self.deparse(node), None, False))
+
+    @staticmethod
+    def _is_qualified_join(_join: dict) -> bool:
+        return True
+
+    def _format_join_on(self, quals, pad, lines):
+        """Format ON/AND for a qualified join."""
+        if 'BoolExpr' in quals:
+            bool_expr = quals['BoolExpr']
+            boolop = bool_expr['boolop']
+            if boolop in ('AND_EXPR', 'OR_EXPR'):
+                op_kw = 'AND' if boolop == 'AND_EXPR' else 'OR'
+                args = self._flatten_bool_expr(
+                    quals,
+                    boolop,
+                )
+                lines.append(f'{pad}ON {self.deparse(args[0])}')
+                on_pad = pad + '   '
+                for arg in args[1:]:
+                    lines.append(f'{on_pad}{op_kw} {self.deparse(arg)}')
+                return
+        lines.append(f'{pad}ON {self.deparse(quals)}')
 
     @staticmethod
     def _set_op_keyword(node: dict) -> str:

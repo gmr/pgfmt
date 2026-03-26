@@ -23,8 +23,29 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         lines: list[str] = []
 
-        distinct = (
-            'DISTINCT ' if node.get('distinctClause') is not None else ''
+        with_clause = node.get('withClause')
+        if with_clause:
+            for i, cte_node in enumerate(
+                with_clause.get('ctes', []),
+            ):
+                cte = cte_node['CommonTableExpr']
+                name = cte['ctename']
+                query = cte['ctequery']
+                inner = self._format_statement(query)
+                kw = 'WITH' if i == 0 else ''
+                sep = ',' if i < len(with_clause['ctes']) - 1 else ''
+                if kw:
+                    lines.append(f'{kw} {name} AS (')
+                else:
+                    lines.append(f'{name} AS (')
+                for sub in inner.split('\n'):
+                    lines.append(f'{INDENT}{sub}')
+                lines.append(f'){sep}')
+                if not sep:
+                    lines.append('')
+
+        distinct = self._format_distinct(
+            node.get('distinctClause'),
         )
         targets = [self.deparse(t) for t in node.get('targetList', [])]
         if len(targets) == 1:
@@ -170,6 +191,16 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             self._format_where(where, lines)
 
         return '\n'.join(lines)
+
+    def format_view(self, node: dict) -> str:
+        view = node['view']
+        name = self._deparse_range_var(
+            view,
+            include_alias=False,
+        )
+        query = node['query']
+        inner = self._format_statement(query)
+        return f'CREATE VIEW {name} AS\n{inner}'
 
     # ------------------------------------------------------------------
     # Subquery formatting

@@ -18,13 +18,18 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             right = self.format_select(node['rarg'], indent)
             return f'{left}\n\n{prefix}{set_op}\n\n{right}'
 
+        cte_lines = self._format_with_clause(
+            node.get('withClause'),
+            indent,
+        )
+
         keywords = self._collect_select_keywords(node)
         width = max(len(k) for k in keywords)
         lines = []
 
-        distinct = ''
-        if node.get('distinctClause') is not None:
-            distinct = 'DISTINCT '
+        distinct = self._format_distinct(
+            node.get('distinctClause'),
+        )
         targets = [self.deparse(t) for t in node.get('targetList', [])]
         first_target = f'{distinct}{targets[0]}' if targets else ''
         self._append_comma_list(
@@ -96,7 +101,10 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             )
 
         raw = '\n'.join(lines)
-        return '\n'.join(f'{prefix}{line}' for line in raw.split('\n'))
+        body = '\n'.join(f'{prefix}{line}' for line in raw.split('\n'))
+        if cte_lines:
+            return f'{cte_lines}\n{body}'
+        return body
 
     def format_insert(self, node: dict) -> str:
         relation = self._deparse_range_var(
@@ -208,6 +216,16 @@ class RiverFormatter(pgfmt.formatter.Formatter):
 
         return '\n'.join(lines)
 
+    def format_view(self, node: dict) -> str:
+        view = node['view']
+        name = self._deparse_range_var(
+            view,
+            include_alias=False,
+        )
+        query = node['query']
+        inner = self._format_statement(query)
+        return f'CREATE VIEW {name} AS\n{inner}'
+
     # ------------------------------------------------------------------
     # Subquery formatting
     # ------------------------------------------------------------------
@@ -246,6 +264,35 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                     inner,
                     ')',
                 )
+
+    # ------------------------------------------------------------------
+    # CTE and DISTINCT helpers
+    # ------------------------------------------------------------------
+
+    def _format_with_clause(
+        self,
+        with_clause: dict | None,
+        indent: int,
+    ) -> str:
+        if not with_clause:
+            return ''
+        prefix = ' ' * indent
+        ctes = with_clause.get('ctes', [])
+        parts = []
+        for i, cte_node in enumerate(ctes):
+            cte = cte_node['CommonTableExpr']
+            name = cte['ctename']
+            query = cte['ctequery']
+            inner = self._format_statement(query)
+            kw = 'WITH' if i == 0 else ''
+            comma = ',' if i < len(ctes) - 1 else ''
+            if kw:
+                parts.append(
+                    f'{prefix}{kw} {name} AS (\n{inner}\n{prefix}){comma}'
+                )
+            else:
+                parts.append(f'{prefix}{name} AS (\n{inner}\n{prefix}){comma}')
+        return '\n'.join(parts)
 
     # ------------------------------------------------------------------
     # River formatting helpers

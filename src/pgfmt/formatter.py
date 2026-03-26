@@ -72,8 +72,11 @@ class Formatter(abc.ABC):
                 return self.format_update(node)
             case 'DeleteStmt':
                 return self.format_delete(node)
+            case 'ViewStmt':
+                return self.format_view(node)
             case _:
-                raise ValueError(f'Unsupported statement type: {key}')
+                stmt_name = key.removesuffix('Stmt')
+                raise ValueError(f'Unsupported statement type: {stmt_name}')
 
     @abc.abstractmethod
     def format_select(self, node: dict, indent: int = 0) -> str:
@@ -90,6 +93,10 @@ class Formatter(abc.ABC):
     @abc.abstractmethod
     def format_delete(self, node: dict) -> str:
         """Format a DELETE statement."""
+
+    @abc.abstractmethod
+    def format_view(self, node: dict) -> str:
+        """Format a CREATE VIEW statement."""
 
     # ------------------------------------------------------------------
     # Shared deparsing: AST node -> inline SQL text
@@ -437,6 +444,25 @@ class Formatter(abc.ABC):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _format_distinct(
+        self,
+        distinct_clause: list | None,
+    ) -> str:
+        """Format a DISTINCT or DISTINCT ON clause prefix."""
+        if distinct_clause is None:
+            return ''
+        has_columns = any(
+            isinstance(item, dict) and item for item in distinct_clause
+        )
+        if not has_columns:
+            return 'DISTINCT '
+        cols = ', '.join(
+            self.deparse(item)
+            for item in distinct_clause
+            if isinstance(item, dict) and item
+        )
+        return f'DISTINCT ON ({cols}) '
 
     @staticmethod
     def _indent_continuation(

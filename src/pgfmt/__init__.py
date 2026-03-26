@@ -22,6 +22,10 @@ def format(sql: str, style: str = 'river') -> str:
             from pgfmt.river import RiverFormatter
 
             formatter = RiverFormatter()
+        case 'mozilla':
+            from pgfmt.mozilla import MozillaFormatter
+
+            formatter = MozillaFormatter()
         case _:
             raise ValueError(f'Unsupported style: {style!r}')
     return formatter.format(sql)

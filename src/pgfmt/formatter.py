@@ -166,6 +166,8 @@ class Formatter(abc.ABC):
                 return self._deparse_range_subselect(node)
             case 'BooleanTest':
                 return self._deparse_boolean_test(node)
+            case 'RangeFunction':
+                return self._deparse_range_function(node)
             case 'SetToDefault':
                 return 'DEFAULT'
             case _:
@@ -186,7 +188,7 @@ class Formatter(abc.ABC):
             escaped = val.replace("'", "''")
             return f"'{escaped}'"
         if 'boolval' in node:
-            return 'TRUE' if node['boolval']['boolval'] else 'FALSE'
+            return 'TRUE' if node['boolval'].get('boolval') else 'FALSE'
         return 'NULL'
 
     def _deparse_a_expr(self, node: dict) -> str:
@@ -370,6 +372,22 @@ class Formatter(abc.ABC):
             alias = node.get('alias')
             if alias:
                 result += f' AS {alias["aliasname"]}'
+        return result
+
+    def _deparse_range_function(self, node: dict) -> str:
+        functions = node.get('functions', [])
+        parts = []
+        for func_item in functions:
+            if isinstance(func_item, dict) and 'List' in func_item:
+                items = func_item['List'].get('items', [])
+                if items:
+                    parts.append(self.deparse(items[0]))
+            else:
+                parts.append(self.deparse(func_item))
+        result = ', '.join(parts)
+        alias = node.get('alias')
+        if alias:
+            result += f' AS {alias["aliasname"]}'
         return result
 
     def _deparse_range_subselect(self, node: dict) -> str:

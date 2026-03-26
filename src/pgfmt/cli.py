@@ -17,7 +17,7 @@ def main() -> None:
     parser.add_argument(
         '--style',
         default='river',
-        choices=['river'],
+        choices=['river', 'mozilla'],
         help='formatting style (default: river)',
     )
     parser.add_argument(

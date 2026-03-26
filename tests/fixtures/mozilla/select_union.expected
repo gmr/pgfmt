@@ -1,0 +1,5 @@
+SELECT x
+FROM t
+UNION ALL
+SELECT y
+FROM s;

@@ -1,0 +1,1 @@
+DELETE FROM albums WHERE id = 1 AND active = FALSE

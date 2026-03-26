@@ -1,0 +1,1 @@
+SELECT DISTINCT x, y FROM t WHERE z = 1

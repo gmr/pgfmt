@@ -1,0 +1,5 @@
+  SELECT x,
+         COUNT(*) AS cnt
+    FROM t
+GROUP BY x
+  HAVING COUNT(*) > 1;

@@ -1,0 +1,16 @@
+CREATE VIEW report.order_summary_vw AS
+WITH recent_orders AS (
+  SELECT DISTINCT ON (orders.account_id) orders.account_id,
+         orders.order_id
+    FROM public.orders
+ORDER BY orders.account_id, orders.placed_at DESC
+)
+  SELECT ro.account_id,
+         MAX(CASE WHEN sr.label::TEXT ~~ '%Cancelled%'::TEXT THEN 'Cancelled'::TEXT ELSE 'Active'::TEXT END) AS account_status
+    FROM recent_orders AS ro
+         LEFT JOIN public.order_status AS os
+         ON ro.order_id = os.order_id
+
+         LEFT JOIN public.status_reason AS sr
+         ON os.reason_id = sr.reason_id
+GROUP BY ro.account_id;

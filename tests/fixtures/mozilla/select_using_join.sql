@@ -1,0 +1,1 @@
+SELECT sp.account_id, p.plan_name FROM subscriptions AS sp JOIN plans AS p USING (plan_id) JOIN features AS f USING (feature_id) WHERE f.feature_name = 'notifications'

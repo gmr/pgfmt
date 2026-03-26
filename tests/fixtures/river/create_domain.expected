@@ -1,0 +1,2 @@
+CREATE DOMAIN public.status_type AS TEXT
+    CONSTRAINT valid_values CHECK (value = ANY (ARRAY['active'::TEXT, 'inactive'::TEXT, 'pending'::TEXT]));

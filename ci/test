@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+set -e
+
+echo '
+LINTING
+'
+uv run pre-commit run --all-files
+
+echo '
+RUNNING TESTS
+'
+uv run coverage run
+uv run coverage report
+uv run coverage xml

@@ -225,11 +225,55 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         elts = node.get('tableElts', [])
         options = node.get('options')
 
+        columns = []
+        pk_constraints = []
+        other_constraints = []
+        for elt in elts:
+            if 'ColumnDef' in elt:
+                columns.append(elt['ColumnDef'])
+            elif 'Constraint' in elt:
+                c = elt['Constraint']
+                if c.get('contype') == 'CONSTR_PRIMARY':
+                    pk_constraints.append(c)
+                else:
+                    other_constraints.append(c)
+
+        max_name = max(
+            (len(c['colname']) for c in columns),
+            default=0,
+        )
+        max_type = max(
+            (len(self._deparse_type_name(c['typeName'])) for c in columns),
+            default=0,
+        )
+        type_col = max_name + 1
+        cons_col = type_col + max_type + 1
+
+        ordered: list[str] = []
+        for pk in pk_constraints:
+            keys = self._extract_names(pk.get('keys', []))
+            ordered.append(f'    PRIMARY KEY ({", ".join(keys)})')
+        for col in columns:
+            ordered.append(
+                self._format_column_aligned(
+                    col,
+                    type_col,
+                    cons_col,
+                )
+            )
+        for cons in other_constraints:
+            ordered.extend(self._format_table_constraint(cons, type_col))
+
         lines = [f'CREATE TABLE {name} (']
-        for i, elt in enumerate(elts):
-            item = self.deparse(elt)
-            suffix = ',' if i < len(elts) - 1 else ''
-            lines.append(f'  {item}{suffix}')
+        for i, item in enumerate(ordered):
+            is_last = i == len(ordered) - 1
+            next_is_continuation = not is_last and ordered[
+                i + 1
+            ].lstrip().startswith('CHECK(')
+            if is_last or next_is_continuation:
+                lines.append(item)
+            else:
+                lines.append(f'{item},')
         lines.append(')')
 
         if options:
@@ -237,6 +281,48 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             lines[-1] += f'\nWITH ({opts})'
 
         return '\n'.join(lines)
+
+    def _format_column_aligned(
+        self,
+        col: dict,
+        type_col: int,
+        cons_col: int,
+    ) -> str:
+        name = col['colname']
+        type_name = self._deparse_type_name(col['typeName'])
+        parts = []
+        for cons in col.get('constraints', []):
+            parts.append(self._deparse_column_constraint(cons['Constraint']))
+        padded_name = name.ljust(type_col)
+        padded_type = type_name.ljust(cons_col - type_col)
+        constraints = ' '.join(parts)
+        return f'    {padded_name}{padded_type}{constraints}'.rstrip()
+
+    def _format_table_constraint(
+        self,
+        cons: dict,
+        type_col: int,
+    ) -> list[str]:
+        pad = ' ' * (4 + type_col)
+        contype = cons.get('contype', '')
+        conname = cons.get('conname')
+        result = []
+        if conname:
+            result.append(f'{pad}CONSTRAINT {conname}')
+        match contype:
+            case 'CONSTR_CHECK':
+                expr = self.deparse(cons.get('raw_expr'))
+                result.append(f'{pad}CHECK({expr})')
+            case 'CONSTR_UNIQUE':
+                keys = self._extract_names(cons.get('keys', []))
+                result.append(f'{pad}UNIQUE ({", ".join(keys)})')
+            case 'CONSTR_FOREIGN':
+                fk_attrs = self._extract_names(cons.get('fk_attrs', []))
+                fk = self._deparse_fk_constraint(cons)
+                result.append(f'{pad}FOREIGN KEY ({", ".join(fk_attrs)}) {fk}')
+            case _:
+                result.append(f'{pad}{self._deparse_constraint(cons)}')
+        return result
 
     def format_view(self, node: dict) -> str:
         view = node['view']

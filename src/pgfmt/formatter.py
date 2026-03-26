@@ -58,10 +58,18 @@ class Formatter(abc.ABC):
         results = []
         for stmt_wrapper in statements:
             stmt = stmt_wrapper['stmt']
-            results.append(self._format_statement(stmt) + ';')
+            formatted = self._format_statement(
+                stmt,
+                stmt_wrapper,
+            )
+            results.append(formatted + ';')
         return '\n\n'.join(results)
 
-    def _format_statement(self, stmt: dict) -> str:
+    def _format_statement(
+        self,
+        stmt: dict,
+        wrapper: dict | None = None,
+    ) -> str:
         key = next(iter(stmt))
         node = stmt[key]
         match key:
@@ -83,9 +91,10 @@ class Formatter(abc.ABC):
                 return self.format_create_function(node)
             case 'CreateDomainStmt':
                 return self._format_create_domain(node)
+            case 'CreateUserMappingStmt':
+                return self._format_create_user_mapping(node)
             case _:
-                stmt_name = key.removesuffix('Stmt')
-                raise ValueError(f'Unsupported statement type: {stmt_name}')
+                return self._passthrough(wrapper)
 
     @abc.abstractmethod
     def format_select(self, node: dict, indent: int = 0) -> str:
@@ -204,6 +213,19 @@ class Formatter(abc.ABC):
 
         return '\n'.join(lines)
 
+    def _passthrough(self, wrapper: dict | None) -> str:
+        """Return the original SQL for unsupported statement types."""
+        source = getattr(self, '_source_sql', '')
+        if not wrapper or not source:
+            return source.strip().rstrip(';')
+        loc = wrapper.get('stmt_location', 0)
+        length = wrapper.get('stmt_len', 0)
+        if length > 0:
+            text = source[loc : loc + length]
+        else:
+            text = source[loc:]
+        return text.strip().rstrip(';')
+
     def _format_create_domain(self, node: dict) -> str:
         name = '.'.join(self._extract_names(node.get('domainname', [])))
         base_type = self._deparse_type_name(node['typeName'])
@@ -211,6 +233,30 @@ class Formatter(abc.ABC):
         for cons in node.get('constraints', []):
             c = cons['Constraint']
             lines.append(f'    {self._deparse_column_constraint(c)}')
+        return '\n'.join(lines)
+
+    def _format_create_user_mapping(self, node: dict) -> str:
+        user = node['user']
+        rolename = user.get('rolename', 'PUBLIC')
+        server = node['servername']
+        lines = [
+            f'CREATE USER MAPPING FOR {rolename} SERVER {server}',
+        ]
+        options = node.get('options', [])
+        if options:
+            opt_parts = []
+            for opt in options:
+                elem = opt['DefElem']
+                name = elem['defname']
+                arg = elem.get('arg')
+                if arg and 'String' in arg:
+                    val = arg['String']['sval']
+                    opt_parts.append(f"    {name} '{val}'")
+                else:
+                    opt_parts.append(f'    {name}')
+            lines.append('OPTIONS (')
+            lines.append(',\n'.join(opt_parts))
+            lines.append(')')
         return '\n'.join(lines)
 
     # ------------------------------------------------------------------

@@ -77,7 +77,7 @@ output = "build/coverage.xml"
 
 [tool.ruff]
 line-length = 79
-target-version = "py312"
+target-version = "py311"
 exclude = []
 src = ["src"]
 

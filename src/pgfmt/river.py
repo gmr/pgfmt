@@ -47,7 +47,11 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                 from_items,
             ):
                 if not is_qual:
-                    lines.append(self._river_line(kw, table, width))
+                    if kw == ',':
+                        lines[-1] += ','
+                        lines.append(f'{content_pad}{table}')
+                    else:
+                        lines.append(self._river_line(kw, table, width))
                     if quals is not None:
                         self._format_condition_clause(
                             'ON',
@@ -285,7 +289,9 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         ordered: list[str] = []
         for pk in pk_constraints:
             keys = self._extract_names(pk.get('keys', []))
-            ordered.append(f'    PRIMARY KEY ({", ".join(keys)})')
+            conname = pk.get('conname')
+            prefix_str = f'CONSTRAINT {conname} ' if conname else ''
+            ordered.append(f'    {prefix_str}PRIMARY KEY ({", ".join(keys)})')
         for col in columns:
             ordered.append(
                 self._format_column_aligned(
@@ -300,10 +306,7 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         lines = [f'{prefix} {name} (']
         for i, item in enumerate(ordered):
             is_last = i == len(ordered) - 1
-            next_is_continuation = not is_last and ordered[
-                i + 1
-            ].lstrip().startswith('CHECK(')
-            if is_last or next_is_continuation:
+            if is_last:
                 lines.append(item)
             else:
                 lines.append(f'{item},')
@@ -349,23 +352,24 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         pad = ' ' * (4 + type_col)
         contype = cons.get('contype', '')
         conname = cons.get('conname')
-        result = []
-        if conname:
-            result.append(f'{pad}CONSTRAINT {conname}')
+        prefix_str = f'CONSTRAINT {conname}\n{pad}' if conname else ''
         match contype:
             case 'CONSTR_CHECK':
                 expr = self.deparse(cons.get('raw_expr'))
-                result.append(f'{pad}CHECK({expr})')
+                body = f'{pad}{prefix_str}CHECK({expr})'
             case 'CONSTR_UNIQUE':
                 keys = self._extract_names(cons.get('keys', []))
-                result.append(f'{pad}UNIQUE ({", ".join(keys)})')
+                body = f'{pad}{prefix_str}UNIQUE ({", ".join(keys)})'
             case 'CONSTR_FOREIGN':
                 fk_attrs = self._extract_names(cons.get('fk_attrs', []))
                 fk = self._deparse_fk_constraint(cons)
-                result.append(f'{pad}FOREIGN KEY ({", ".join(fk_attrs)}) {fk}')
+                body = (
+                    f'{pad}{prefix_str}'
+                    f'FOREIGN KEY ({", ".join(fk_attrs)}) {fk}'
+                )
             case _:
-                result.append(f'{pad}{self._deparse_constraint(cons)}')
-        return result
+                body = f'{pad}{self._deparse_constraint(cons)}'
+        return [body]
 
     def format_view(self, node: dict) -> str:
         view = node['view']
@@ -396,8 +400,15 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                 )
             case 'ANY_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
+                op = self._get_operator(node.get('operName', []))
+                if op == '=':
+                    return self._indent_continuation(
+                        f'{test} IN (',
+                        inner,
+                        ')',
+                    )
                 return self._indent_continuation(
-                    f'{test} IN (',
+                    f'{test} {op} ANY (',
                     inner,
                     ')',
                 )
@@ -471,6 +482,8 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         lines: list[str],
     ) -> None:
         """Append a keyword + comma-separated items."""
+        if not items:
+            return
         first = items[0]
         if len(items) > 1:
             first += ','
@@ -617,7 +630,8 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             qualified = self._is_qualified_join(join)
             items.append((kw, right, quals, using, qualified))
         else:
-            items.append(('FROM', self.deparse(node), None, None, False))
+            kw = 'FROM' if is_first else ','
+            items.append((kw, self.deparse(node), None, None, False))
 
     def _is_qualified_join(self, join: dict) -> bool:
         kw = self._join_keyword(join)

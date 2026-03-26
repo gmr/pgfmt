@@ -62,7 +62,10 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             from_items = self._flatten_from(from_clause)
             for kw, table, quals, using in from_items:
                 has_joins = len(from_items) > 1
-                if kw == 'FROM' and not has_joins:
+                if kw == ',':
+                    lines[-1] += ','
+                    lines.append(f'{INDENT}{table}')
+                elif kw == 'FROM' and not has_joins:
                     lines.append(f'FROM {table}')
                 elif kw == 'FROM':
                     lines.append('FROM')
@@ -266,7 +269,10 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                 return f'EXISTS (\n{inner}\n{close})'
             case 'ANY_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
-                return f'{test} IN (\n{inner}\n{close})'
+                op = self._get_operator(node.get('operName', []))
+                if op == '=':
+                    return f'{test} IN (\n{inner}\n{close})'
+                return f'{test} {op} ANY (\n{inner}\n{close})'
             case 'ALL_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
                 op = self._get_operator(node.get('operName', []))
@@ -375,7 +381,8 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             using = join.get('usingClause')
             items.append((kw, right, quals, using))
         else:
-            items.append(('FROM', self.deparse(node), None, None))
+            kw = 'FROM' if is_first else ','
+            items.append((kw, self.deparse(node), None, None))
 
     @staticmethod
     def _set_op_keyword(node: dict) -> str:

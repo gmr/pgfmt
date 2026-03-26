@@ -11,8 +11,11 @@ def _fixture_cases():
     """Yield (name, sql_path, expected_path) for each fixture pair."""
     for sql_file in sorted(FIXTURES.glob('*.sql')):
         expected_file = sql_file.with_suffix('.expected')
-        if expected_file.exists():
-            yield sql_file.stem, sql_file, expected_file
+        if not expected_file.exists():
+            raise FileNotFoundError(
+                f'Missing .expected file for {sql_file.name}'
+            )
+        yield sql_file.stem, sql_file, expected_file
 
 
 @pytest.fixture(params=list(_fixture_cases()), ids=lambda c: c[0])

@@ -507,7 +507,10 @@ class Formatter(abc.ABC):
                 return f'EXISTS ({inner})'
             case 'ANY_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
-                return f'{test} IN ({inner})'
+                op = self._get_operator(node.get('operName', []))
+                if op == '=':
+                    return f'{test} IN ({inner})'
+                return f'{test} {op} ANY ({inner})'
             case 'ALL_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
                 op = self._get_operator(node.get('operName', []))
@@ -673,6 +676,9 @@ class Formatter(abc.ABC):
                 parts.append(f"{name}='{val}'")
             elif arg and 'Integer' in arg:
                 val = arg['Integer']['ival']
+                parts.append(f'{name}={val}')
+            elif arg and 'Boolean' in arg:
+                val = 'true' if arg['Boolean'].get('boolval') else 'false'
                 parts.append(f'{name}={val}')
             else:
                 parts.append(name)

@@ -36,7 +36,7 @@ def main() -> None:
             continue
         formatted = pgfmt.format(sql, style=args.style)
         if args.check:
-            if formatted != sql:
+            if formatted.strip() != sql.strip():
                 name = getattr(source, 'name', '<stdin>')
                 sys.stderr.write(f'Would reformat: {name}\n')
                 exit_code = 1

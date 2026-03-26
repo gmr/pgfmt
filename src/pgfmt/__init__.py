@@ -26,6 +26,10 @@ def format(sql: str, style: str = 'river') -> str:
             from pgfmt.mozilla import MozillaFormatter
 
             formatter = MozillaFormatter()
+        case 'aweber':
+            from pgfmt.aweber import AWeberFormatter
+
+            formatter = AWeberFormatter()
         case _:
             raise ValueError(f'Unsupported style: {style!r}')
     return formatter.format(sql)

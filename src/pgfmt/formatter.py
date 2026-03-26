@@ -81,6 +81,8 @@ class Formatter(abc.ABC):
                 return self.format_create_table_as(node)
             case 'CreateFunctionStmt':
                 return self.format_create_function(node)
+            case 'CreateDomainStmt':
+                return self._format_create_domain(node)
             case _:
                 stmt_name = key.removesuffix('Stmt')
                 raise ValueError(f'Unsupported statement type: {stmt_name}')
@@ -200,6 +202,15 @@ class Formatter(abc.ABC):
             lines.append(body.rstrip())
             lines.append('$$')
 
+        return '\n'.join(lines)
+
+    def _format_create_domain(self, node: dict) -> str:
+        name = '.'.join(self._extract_names(node.get('domainname', [])))
+        base_type = self._deparse_type_name(node['typeName'])
+        lines = [f'CREATE DOMAIN {name} AS {base_type}']
+        for cons in node.get('constraints', []):
+            c = cons['Constraint']
+            lines.append(f'    {self._deparse_column_constraint(c)}')
         return '\n'.join(lines)
 
     # ------------------------------------------------------------------

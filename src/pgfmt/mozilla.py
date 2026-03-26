@@ -32,12 +32,13 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                 name = cte['ctename']
                 query = cte['ctequery']
                 inner = self._format_statement(query)
-                kw = 'WITH' if i == 0 else ''
+                kw = self._kw('WITH') if i == 0 else ''
                 sep = ',' if i < len(with_clause['ctes']) - 1 else ''
+                as_kw = self._kw('AS')
                 if kw:
-                    lines.append(f'{kw} {name} AS (')
+                    lines.append(f'{kw} {name} {as_kw} (')
                 else:
-                    lines.append(f'{name} AS (')
+                    lines.append(f'{name} {as_kw} (')
                 for sub in inner.split('\n'):
                     lines.append(f'{INDENT}{sub}')
                 lines.append(f'){sep}')
@@ -48,10 +49,11 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             node.get('distinctClause'),
         )
         targets = [self.deparse(t) for t in node.get('targetList', [])]
+        select_kw = self._kw('SELECT')
         if len(targets) == 1:
-            lines.append(f'SELECT {distinct}{targets[0]}')
+            lines.append(f'{select_kw} {distinct}{targets[0]}')
         else:
-            lines.append('SELECT')
+            lines.append(select_kw)
             for i, t in enumerate(targets):
                 pfx = distinct if i == 0 else ''
                 suffix = ',' if i < len(targets) - 1 else ''
@@ -59,16 +61,17 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         from_clause = node.get('fromClause', [])
         if from_clause:
+            from_kw = self._kw('FROM')
             from_items = self._flatten_from(from_clause)
             for kw, table, quals, using in from_items:
                 has_joins = len(from_items) > 1
                 if kw == ',':
                     lines[-1] += ','
                     lines.append(f'{INDENT}{table}')
-                elif kw == 'FROM' and not has_joins:
-                    lines.append(f'FROM {table}')
-                elif kw == 'FROM':
-                    lines.append('FROM')
+                elif kw == from_kw and not has_joins:
+                    lines.append(f'{from_kw} {table}')
+                elif kw == from_kw:
+                    lines.append(from_kw)
                     lines.append(f'{INDENT}{table}')
                 else:
                     lines.append(kw)
@@ -78,7 +81,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                 if using is not None:
                     cols = ', '.join(self._extract_names(using))
                     self._append_indented(
-                        f'USING ({cols})',
+                        f'{self._kw("USING")} ({cols})',
                         lines,
                     )
 
@@ -88,13 +91,16 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         group = node.get('groupClause')
         if group:
+            group_kw = self._kw('GROUP BY')
             if len(group) == 1:
-                lines.append(f'GROUP BY {self.deparse(group[0])}')
+                lines.append(f'{group_kw} {self.deparse(group[0])}')
             else:
-                lines.append('GROUP BY')
+                lines.append(group_kw)
                 for i, g in enumerate(group):
                     suffix = ',' if i < len(group) - 1 else ''
-                    lines.append(f'{INDENT}{self.deparse(g)}{suffix}')
+                    lines.append(
+                        f'{INDENT}{self.deparse(g)}{suffix}',
+                    )
 
         having = node.get('havingClause')
         if having:
@@ -102,21 +108,28 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         sort = node.get('sortClause')
         if sort:
+            order_kw = self._kw('ORDER BY')
             if len(sort) == 1:
-                lines.append(f'ORDER BY {self.deparse(sort[0])}')
+                lines.append(f'{order_kw} {self.deparse(sort[0])}')
             else:
-                lines.append('ORDER BY')
+                lines.append(order_kw)
                 for i, s in enumerate(sort):
                     suffix = ',' if i < len(sort) - 1 else ''
-                    lines.append(f'{INDENT}{self.deparse(s)}{suffix}')
+                    lines.append(
+                        f'{INDENT}{self.deparse(s)}{suffix}',
+                    )
 
         limit = node.get('limitCount')
         if limit:
-            lines.append(f'LIMIT {self.deparse(limit)}')
+            lines.append(
+                f'{self._kw("LIMIT")} {self.deparse(limit)}',
+            )
 
         offset = node.get('limitOffset')
         if offset:
-            lines.append(f'OFFSET {self.deparse(offset)}')
+            lines.append(
+                f'{self._kw("OFFSET")} {self.deparse(offset)}',
+            )
 
         return '\n'.join(f'{pad}{line}' for line in lines)
 
@@ -136,7 +149,9 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             col_names = ', '.join(c['ResTarget']['name'] for c in cols)
             col_list = f' ({col_names})'
 
-        lines.append(f'INSERT INTO {relation}{col_list}')
+        lines.append(
+            f'{self._kw("INSERT INTO")} {relation}{col_list}',
+        )
 
         values_lists = select.get('valuesLists')
         if values_lists:
@@ -145,10 +160,11 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                 items = vl['List']['items']
                 vals = ', '.join(self.deparse(v) for v in items)
                 rows.append(f'({vals})')
+            values_kw = self._kw('VALUES')
             if len(rows) == 1:
-                lines.append(f'VALUES {rows[0]}')
+                lines.append(f'{values_kw} {rows[0]}')
             else:
-                lines.append('VALUES')
+                lines.append(values_kw)
                 for i, row in enumerate(rows):
                     suffix = ',' if i < len(rows) - 1 else ''
                     lines.append(f'{INDENT}{row}{suffix}')
@@ -167,16 +183,19 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         where = node.get('whereClause')
 
         lines: list[str] = []
-        lines.append(f'UPDATE {relation}')
+        lines.append(f'{self._kw("UPDATE")} {relation}')
 
         set_items = []
         for t in targets:
             rt = t['ResTarget']
-            set_items.append(f'{rt["name"]} = {self.deparse(rt.get("val"))}')
+            set_items.append(
+                f'{rt["name"]} = {self.deparse(rt.get("val"))}',
+            )
+        set_kw = self._kw('SET')
         if len(set_items) == 1:
-            lines.append(f'SET {set_items[0]}')
+            lines.append(f'{set_kw} {set_items[0]}')
         else:
-            lines.append('SET')
+            lines.append(set_kw)
             for i, item in enumerate(set_items):
                 suffix = ',' if i < len(set_items) - 1 else ''
                 lines.append(f'{INDENT}{item}{suffix}')
@@ -194,7 +213,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         where = node.get('whereClause')
 
         lines: list[str] = []
-        lines.append(f'DELETE FROM {relation}')
+        lines.append(f'{self._kw("DELETE FROM")} {relation}')
 
         if where:
             self._format_where(where, lines)
@@ -215,7 +234,11 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         )
         elts = node.get('tableElts', [])
         options = node.get('options')
-        prefix = 'CREATE FOREIGN TABLE' if foreign_server else 'CREATE TABLE'
+        prefix = (
+            self._kw('CREATE FOREIGN TABLE')
+            if foreign_server
+            else self._kw('CREATE TABLE')
+        )
 
         lines = [f'{prefix} {name} (']
         for i, elt in enumerate(elts):
@@ -248,7 +271,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         )
         query = node['query']
         inner = self._format_statement(query)
-        return f'CREATE VIEW {name} AS\n{inner}'
+        return f'{self._kw("CREATE VIEW")} {name} {self._kw("AS")}\n{inner}'
 
     # ------------------------------------------------------------------
     # Subquery formatting
@@ -266,17 +289,17 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         close = ''
         match sub_type:
             case 'EXISTS_SUBLINK':
-                return f'EXISTS (\n{inner}\n{close})'
+                return f'{self._kw("EXISTS")} (\n{inner}\n{close})'
             case 'ANY_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
                 op = self._get_operator(node.get('operName', []))
                 if op == '=':
-                    return f'{test} IN (\n{inner}\n{close})'
-                return f'{test} {op} ANY (\n{inner}\n{close})'
+                    return f'{test} {self._kw("IN")} (\n{inner}\n{close})'
+                return f'{test} {op} {self._kw("ANY")} (\n{inner}\n{close})'
             case 'ALL_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
                 op = self._get_operator(node.get('operName', []))
-                return f'{test} {op} ALL (\n{inner}\n{close})'
+                return f'{test} {op} {self._kw("ALL")} (\n{inner}\n{close})'
             case _:
                 return f'(\n{inner}\n{close})'
 
@@ -299,9 +322,11 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             bool_expr = node['BoolExpr']
             boolop = bool_expr['boolop']
             if boolop in ('AND_EXPR', 'OR_EXPR'):
-                op_kw = 'AND' if boolop == 'AND_EXPR' else 'OR'
+                op_kw = self._kw(
+                    'AND' if boolop == 'AND_EXPR' else 'OR',
+                )
                 args = self._flatten_bool_expr(node, boolop)
-                lines.append('WHERE')
+                lines.append(self._kw('WHERE'))
                 self._append_indented(
                     self.deparse(args[0]),
                     lines,
@@ -312,7 +337,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                         lines,
                     )
                 return
-        lines.append('WHERE')
+        lines.append(self._kw('WHERE'))
         self._append_indented(self.deparse(node), lines)
 
     def _format_having(
@@ -320,7 +345,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         node: dict,
         lines: list[str],
     ) -> None:
-        lines.append('HAVING')
+        lines.append(self._kw('HAVING'))
         self._append_indented(self.deparse(node), lines)
 
     def _format_on(
@@ -332,10 +357,12 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             bool_expr = node['BoolExpr']
             boolop = bool_expr['boolop']
             if boolop in ('AND_EXPR', 'OR_EXPR'):
-                op_kw = 'AND' if boolop == 'AND_EXPR' else 'OR'
+                op_kw = self._kw(
+                    'AND' if boolop == 'AND_EXPR' else 'OR',
+                )
                 args = self._flatten_bool_expr(node, boolop)
                 self._append_indented(
-                    f'ON {self.deparse(args[0])}',
+                    f'{self._kw("ON")} {self.deparse(args[0])}',
                     lines,
                 )
                 for arg in args[1:]:
@@ -345,7 +372,7 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                     )
                 return
         self._append_indented(
-            f'ON {self.deparse(node)}',
+            f'{self._kw("ON")} {self.deparse(node)}',
             lines,
         )
 
@@ -381,22 +408,21 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
             using = join.get('usingClause')
             items.append((kw, right, quals, using))
         else:
-            kw = 'FROM' if is_first else ','
+            kw = self._kw('FROM') if is_first else ','
             items.append((kw, self.deparse(node), None, None))
 
-    @staticmethod
-    def _set_op_keyword(node: dict) -> str:
+    def _set_op_keyword(self, node: dict) -> str:
         op = node.get('op', 'SETOP_NONE')
         is_all = node.get('all', False)
         match op:
             case 'SETOP_UNION':
-                base = 'UNION'
+                base = self._kw('UNION')
             case 'SETOP_INTERSECT':
-                base = 'INTERSECT'
+                base = self._kw('INTERSECT')
             case 'SETOP_EXCEPT':
-                base = 'EXCEPT'
+                base = self._kw('EXCEPT')
             case _:
                 return ''
         if is_all:
-            return f'{base} ALL'
+            return f'{base} {self._kw("ALL")}'
         return base

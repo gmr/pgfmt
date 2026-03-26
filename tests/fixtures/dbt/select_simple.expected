@@ -1,0 +1,11 @@
+select
+    client_id,
+    submission_date
+
+from main_summary
+
+where
+    submission_date > '20180101'
+    and sample_id = '42'
+
+limit 10;

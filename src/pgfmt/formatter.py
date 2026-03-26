@@ -43,6 +43,10 @@ class Formatter(abc.ABC):
     deparsing for individual expression nodes.
     """
 
+    def _kw(self, keyword: str) -> str:
+        """Apply keyword casing. Override for lowercase styles."""
+        return keyword
+
     def format(self, sql: str) -> str:
         """Parse and format a SQL string.
 
@@ -338,9 +342,13 @@ class Formatter(abc.ABC):
             case 'Float':
                 return node.get('fval', '0')
             case 'Boolean':
-                return 'TRUE' if node.get('boolval') else 'FALSE'
+                return (
+                    self._kw('TRUE')
+                    if node.get('boolval')
+                    else self._kw('FALSE')
+                )
             case 'Null':
-                return 'NULL'
+                return self._kw('NULL')
             case 'List':
                 items = node.get('items', [])
                 return ', '.join(self.deparse(i) for i in items)
@@ -361,7 +369,7 @@ class Formatter(abc.ABC):
             case 'Constraint':
                 return self._deparse_constraint(node)
             case 'SetToDefault':
-                return 'DEFAULT'
+                return self._kw('DEFAULT')
             case _:
                 raise ValueError(f'Unsupported node type: {node_type}')
 
@@ -370,7 +378,7 @@ class Formatter(abc.ABC):
 
     def _deparse_a_const(self, node: dict) -> str:
         if node.get('isnull'):
-            return 'NULL'
+            return self._kw('NULL')
         if 'ival' in node:
             return str(node['ival']['ival'])
         if 'fval' in node:
@@ -380,8 +388,12 @@ class Formatter(abc.ABC):
             escaped = val.replace("'", "''")
             return f"'{escaped}'"
         if 'boolval' in node:
-            return 'TRUE' if node['boolval'].get('boolval') else 'FALSE'
-        return 'NULL'
+            return (
+                self._kw('TRUE')
+                if node['boolval'].get('boolval')
+                else self._kw('FALSE')
+            )
+        return self._kw('NULL')
 
     def _deparse_a_expr(self, node: dict) -> str:
         kind = node.get('kind', 'AEXPR_OP')
@@ -393,26 +405,28 @@ class Formatter(abc.ABC):
             case 'AEXPR_OP':
                 return f'{left} {op} {self.deparse(right)}'
             case 'AEXPR_IN':
-                in_kw = 'IN' if op == '=' else 'NOT IN'
+                in_kw = self._kw('IN') if op == '=' else self._kw('NOT IN')
                 values = self._deparse_list_items(right)
                 return f'{left} {in_kw} ({values})'
             case 'AEXPR_LIKE':
-                return f'{left} LIKE {self.deparse(right)}'
+                return f'{left} {self._kw("LIKE")} {self.deparse(right)}'
             case 'AEXPR_ILIKE':
-                return f'{left} ILIKE {self.deparse(right)}'
+                return f'{left} {self._kw("ILIKE")} {self.deparse(right)}'
             case 'AEXPR_SIMILAR':
-                return f'{left} SIMILAR TO {self.deparse(right)}'
+                return f'{left} {self._kw("SIMILAR TO")} {self.deparse(right)}'
             case 'AEXPR_BETWEEN' | 'AEXPR_NOT_BETWEEN':
                 items = right['List']['items']
                 lo = self.deparse(items[0])
                 hi = self.deparse(items[1])
                 between = kind == 'AEXPR_NOT_BETWEEN'
-                kw = 'NOT BETWEEN' if between else 'BETWEEN'
-                return f'{left} {kw} {lo} AND {hi}'
+                kw = (
+                    self._kw('NOT BETWEEN') if between else self._kw('BETWEEN')
+                )
+                return f'{left} {kw} {lo} {self._kw("AND")} {hi}'
             case 'AEXPR_OP_ANY':
-                return f'{left} {op} ANY ({self.deparse(right)})'
+                return f'{left} {op} {self._kw("ANY")} ({self.deparse(right)})'
             case 'AEXPR_OP_ALL':
-                return f'{left} {op} ALL ({self.deparse(right)})'
+                return f'{left} {op} {self._kw("ALL")} ({self.deparse(right)})'
             case _:
                 return f'{left} {op} {self.deparse(right)}'
 
@@ -421,8 +435,16 @@ class Formatter(abc.ABC):
         args = node['args']
         if boolop == 'NOT_EXPR':
             inner = self.deparse(args[0])
-            return self._indent_continuation('NOT (', inner, ')')
-        op = ' AND ' if boolop == 'AND_EXPR' else ' OR '
+            return self._indent_continuation(
+                f'{self._kw("NOT")} (',
+                inner,
+                ')',
+            )
+        op = (
+            f' {self._kw("AND")} '
+            if boolop == 'AND_EXPR'
+            else f' {self._kw("OR")} '
+        )
         parts = []
         for arg in args:
             part = self.deparse(arg)
@@ -436,28 +458,31 @@ class Formatter(abc.ABC):
         return op.join(parts)
 
     def _deparse_func_call(self, node: dict) -> str:
-        func_name = '.'.join(
-            self._extract_names(node.get('funcname', []))
-        ).upper()
+        raw_name = '.'.join(self._extract_names(node.get('funcname', [])))
+        func_name = self._kw(raw_name.upper())
         if node.get('agg_star'):
             args_str = '*'
         else:
             args = [self.deparse(a) for a in node.get('args', [])]
-            distinct = 'DISTINCT ' if node.get('agg_distinct') else ''
+            distinct = (
+                f'{self._kw("DISTINCT")} ' if node.get('agg_distinct') else ''
+            )
             args_str = f'{distinct}{", ".join(args)}'
         result = f'{func_name}({args_str})'
         if 'over' in node:
-            result += f' OVER ({self._deparse_window(node["over"])})'
+            result += (
+                f' {self._kw("OVER")} ({self._deparse_window(node["over"])})'
+            )
         return result
 
     def _deparse_window(self, node: dict) -> str:
         parts = []
         if 'partitionClause' in node:
             exprs = ', '.join(self.deparse(e) for e in node['partitionClause'])
-            parts.append(f'PARTITION BY {exprs}')
+            parts.append(f'{self._kw("PARTITION BY")} {exprs}')
         if 'orderClause' in node:
             exprs = ', '.join(self.deparse(e) for e in node['orderClause'])
-            parts.append(f'ORDER BY {exprs}')
+            parts.append(f'{self._kw("ORDER BY")} {exprs}')
         return ' '.join(parts)
 
     def _deparse_type_cast(self, node: dict) -> str:
@@ -468,14 +493,18 @@ class Formatter(abc.ABC):
     def _deparse_type_name(self, node: dict) -> str:
         name_parts = self._extract_names(node.get('names', []))
         if len(name_parts) == 2 and name_parts[0] == 'pg_catalog':
-            name = PG_TYPE_MAP.get(
-                name_parts[1],
-                name_parts[1].upper(),
+            name = self._kw(
+                PG_TYPE_MAP.get(
+                    name_parts[1],
+                    name_parts[1].upper(),
+                )
             )
         elif len(name_parts) == 1:
-            name = PG_TYPE_MAP.get(
-                name_parts[0],
-                name_parts[0].upper(),
+            name = self._kw(
+                PG_TYPE_MAP.get(
+                    name_parts[0],
+                    name_parts[0].upper(),
+                )
             )
         else:
             name = '.'.join(name_parts)
@@ -490,13 +519,16 @@ class Formatter(abc.ABC):
     def _deparse_null_test(self, node: dict) -> str:
         arg = self.deparse(node['arg'])
         if node['nulltesttype'] == 'IS_NULL':
-            return f'{arg} IS NULL'
-        return f'{arg} IS NOT NULL'
+            return f'{arg} {self._kw("IS NULL")}'
+        return f'{arg} {self._kw("IS NOT NULL")}'
 
     def _deparse_boolean_test(self, node: dict) -> str:
         arg = self.deparse(node['arg'])
-        suffix = _BOOL_TEST_SQL.get(node.get('booltesttype', ''))
-        return f'{arg} {suffix}' if suffix else arg
+        raw = _BOOL_TEST_SQL.get(node.get('booltesttype', ''))
+        if not raw:
+            return arg
+        suffix = self._kw(raw)
+        return f'{arg} {suffix}'
 
     def _deparse_sub_link(self, node: dict) -> str:
         sub_type = node.get('subLinkType', '')
@@ -504,41 +536,43 @@ class Formatter(abc.ABC):
         inner = self.format_select(subselect.get('SelectStmt', subselect))
         match sub_type:
             case 'EXISTS_SUBLINK':
-                return f'EXISTS ({inner})'
+                return f'{self._kw("EXISTS")} ({inner})'
             case 'ANY_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
                 op = self._get_operator(node.get('operName', []))
                 if op == '=':
-                    return f'{test} IN ({inner})'
-                return f'{test} {op} ANY ({inner})'
+                    return f'{test} {self._kw("IN")} ({inner})'
+                return f'{test} {op} {self._kw("ANY")} ({inner})'
             case 'ALL_SUBLINK':
                 test = self.deparse(node.get('testexpr'))
                 op = self._get_operator(node.get('operName', []))
-                return f'{test} {op} ALL ({inner})'
+                return f'{test} {op} {self._kw("ALL")} ({inner})'
             case 'EXPR_SUBLINK':
                 return f'({inner})'
             case _:
                 return f'({inner})'
 
     def _deparse_case_expr(self, node: dict) -> str:
-        parts = ['CASE']
+        parts = [self._kw('CASE')]
         if 'arg' in node:
             parts.append(self.deparse(node['arg']))
         for when in node.get('args', []):
             parts.append(self.deparse(when))
         if 'defresult' in node:
-            parts.append(f'ELSE {self.deparse(node["defresult"])}')
-        parts.append('END')
+            parts.append(
+                f'{self._kw("ELSE")} {self.deparse(node["defresult"])}'
+            )
+        parts.append(self._kw('END'))
         return ' '.join(parts)
 
     def _deparse_case_when(self, node: dict) -> str:
         expr = self.deparse(node['expr'])
         result = self.deparse(node['result'])
-        return f'WHEN {expr} THEN {result}'
+        return f'{self._kw("WHEN")} {expr} {self._kw("THEN")} {result}'
 
     def _deparse_coalesce(self, node: dict) -> str:
         args = ', '.join(self.deparse(a) for a in node.get('args', []))
-        return f'COALESCE({args})'
+        return f'{self._kw("COALESCE")}({args})'
 
     def _deparse_param_ref(self, node: dict) -> str:
         number = node.get('number', 0)
@@ -557,7 +591,7 @@ class Formatter(abc.ABC):
 
     def _deparse_a_array_expr(self, node: dict) -> str:
         elements = ', '.join(self.deparse(e) for e in node.get('elements', []))
-        return f'ARRAY[{elements}]'
+        return f'{self._kw("ARRAY")}[{elements}]'
 
     def _deparse_range_var(
         self,
@@ -573,7 +607,7 @@ class Formatter(abc.ABC):
         if include_alias:
             alias = node.get('alias')
             if alias:
-                result += f' AS {alias["aliasname"]}'
+                result += f' {self._kw("AS")} {alias["aliasname"]}'
         return result
 
     def _deparse_column_def(self, node: dict) -> str:
@@ -589,22 +623,25 @@ class Formatter(abc.ABC):
         contype = node.get('contype', '')
         match contype:
             case 'CONSTR_NOTNULL':
-                return 'NOT NULL'
+                return self._kw('NOT NULL')
             case 'CONSTR_NULL':
-                return 'NULL'
+                return self._kw('NULL')
             case 'CONSTR_DEFAULT':
                 expr = self.deparse(node.get('raw_expr'))
-                return f'DEFAULT {expr}'
+                return f'{self._kw("DEFAULT")} {expr}'
             case 'CONSTR_PRIMARY':
-                return 'PRIMARY KEY'
+                return self._kw('PRIMARY KEY')
             case 'CONSTR_UNIQUE':
-                return 'UNIQUE'
+                return self._kw('UNIQUE')
             case 'CONSTR_CHECK':
                 expr = self.deparse(node.get('raw_expr'))
                 conname = node.get('conname')
                 if conname:
-                    return f'CONSTRAINT {conname} CHECK ({expr})'
-                return f'CHECK ({expr})'
+                    return (
+                        f'{self._kw("CONSTRAINT")} {conname}'
+                        f' {self._kw("CHECK")} ({expr})'
+                    )
+                return f'{self._kw("CHECK")} ({expr})'
             case 'CONSTR_FOREIGN':
                 return self._deparse_fk_constraint(node)
             case _:
@@ -614,20 +651,23 @@ class Formatter(abc.ABC):
         """Deparse a table-level constraint."""
         contype = node.get('contype', '')
         conname = node.get('conname')
-        prefix = f'CONSTRAINT {conname} ' if conname else ''
+        prefix = f'{self._kw("CONSTRAINT")} {conname} ' if conname else ''
         match contype:
             case 'CONSTR_PRIMARY':
                 keys = self._extract_names(node.get('keys', []))
-                return f'{prefix}PRIMARY KEY ({", ".join(keys)})'
+                return f'{prefix}{self._kw("PRIMARY KEY")} ({", ".join(keys)})'
             case 'CONSTR_UNIQUE':
                 keys = self._extract_names(node.get('keys', []))
-                return f'{prefix}UNIQUE ({", ".join(keys)})'
+                return f'{prefix}{self._kw("UNIQUE")} ({", ".join(keys)})'
             case 'CONSTR_CHECK':
                 expr = self.deparse(node.get('raw_expr'))
-                return f'{prefix}CHECK ({expr})'
+                return f'{prefix}{self._kw("CHECK")} ({expr})'
             case 'CONSTR_FOREIGN':
                 fk_attrs = self._extract_names(node.get('fk_attrs', []))
-                result = f'{prefix}FOREIGN KEY ({", ".join(fk_attrs)})'
+                result = (
+                    f'{prefix}{self._kw("FOREIGN KEY")}'
+                    f' ({", ".join(fk_attrs)})'
+                )
                 result += ' ' + self._deparse_fk_constraint(node)
                 return result
             case _:
@@ -640,7 +680,7 @@ class Formatter(abc.ABC):
             include_alias=False,
         )
         pk_attrs = self._extract_names(node.get('pk_attrs', []))
-        result = f'REFERENCES {pk_name}'
+        result = f'{self._kw("REFERENCES")} {pk_name}'
         if pk_attrs:
             result += f' ({", ".join(pk_attrs)})'
         fk_actions = {
@@ -653,9 +693,9 @@ class Formatter(abc.ABC):
         del_action = fk_actions.get(node.get('fk_del_action', 'a'))
         upd_action = fk_actions.get(node.get('fk_upd_action', 'a'))
         if del_action:
-            result += f' ON DELETE {del_action}'
+            result += f' {self._kw("ON DELETE")} {self._kw(del_action)}'
         if upd_action:
-            result += f' ON UPDATE {upd_action}'
+            result += f' {self._kw("ON UPDATE")} {self._kw(upd_action)}'
         return result
 
     def _deparse_storage_options(
@@ -701,10 +741,9 @@ class Formatter(abc.ABC):
                 parts.append(f'{indent}{name}')
         return ',\n'.join(parts)
 
-    @staticmethod
-    def _deparse_sql_value_function(node: dict) -> str:
+    def _deparse_sql_value_function(self, node: dict) -> str:
         op = node.get('op', '')
-        return {
+        raw = {
             'SVFOP_CURRENT_TIMESTAMP': 'CURRENT_TIMESTAMP',
             'SVFOP_CURRENT_DATE': 'CURRENT_DATE',
             'SVFOP_CURRENT_TIME': 'CURRENT_TIME',
@@ -717,6 +756,7 @@ class Formatter(abc.ABC):
             'SVFOP_CURRENT_SCHEMA': 'CURRENT_SCHEMA',
             'SVFOP_USER': 'USER',
         }.get(op, op.removeprefix('SVFOP_'))
+        return self._kw(raw)
 
     def _deparse_range_function(self, node: dict) -> str:
         functions = node.get('functions', [])
@@ -731,7 +771,7 @@ class Formatter(abc.ABC):
         result = ', '.join(parts)
         alias = node.get('alias')
         if alias:
-            result += f' AS {alias["aliasname"]}'
+            result += f' {self._kw("AS")} {alias["aliasname"]}'
         return result
 
     def _deparse_range_subselect(self, node: dict) -> str:
@@ -740,18 +780,19 @@ class Formatter(abc.ABC):
         alias = node.get('alias')
         result = f'({inner})'
         if alias:
-            result += f' AS {alias["aliasname"]}'
+            result += f' {self._kw("AS")} {alias["aliasname"]}'
         return result
 
     def _deparse_res_target(self, node: dict) -> str:
         val = self.deparse(node.get('val'))
         name = node.get('name')
         if name:
+            as_kw = self._kw('AS')
             if '\n' in val:
                 lines = val.split('\n')
-                lines[-1] += f' AS {name}'
+                lines[-1] += f' {as_kw} {name}'
                 return '\n'.join(lines)
-            return f'{val} AS {name}'
+            return f'{val} {as_kw} {name}'
         return val
 
     def _deparse_sort_by(self, node: dict) -> str:
@@ -759,13 +800,13 @@ class Formatter(abc.ABC):
         direction = node.get('sortby_dir', 'SORTBY_DEFAULT')
         nulls = node.get('sortby_nulls', 'SORTBY_NULLS_DEFAULT')
         if direction == 'SORTBY_DESC':
-            expr += ' DESC'
+            expr += f' {self._kw("DESC")}'
         elif direction == 'SORTBY_ASC':
-            expr += ' ASC'
+            expr += f' {self._kw("ASC")}'
         if nulls == 'SORTBY_NULLS_FIRST':
-            expr += ' NULLS FIRST'
+            expr += f' {self._kw("NULLS FIRST")}'
         elif nulls == 'SORTBY_NULLS_LAST':
-            expr += ' NULLS LAST'
+            expr += f' {self._kw("NULLS LAST")}'
         return expr
 
     def _deparse_join_inline(self, node: dict) -> str:
@@ -775,11 +816,11 @@ class Formatter(abc.ABC):
         result = f'{left} {kw} {right}'
         quals = node.get('quals')
         if quals:
-            result += f' ON {self.deparse(quals)}'
+            result += f' {self._kw("ON")} {self.deparse(quals)}'
         using = node.get('usingClause')
         if using:
             cols = ', '.join(self._extract_names(using))
-            result += f' USING ({cols})'
+            result += f' {self._kw("USING")} ({cols})'
         return result
 
     # ------------------------------------------------------------------
@@ -797,13 +838,13 @@ class Formatter(abc.ABC):
             isinstance(item, dict) and item for item in distinct_clause
         )
         if not has_columns:
-            return 'DISTINCT '
+            return f'{self._kw("DISTINCT")} '
         cols = ', '.join(
             self.deparse(item)
             for item in distinct_clause
             if isinstance(item, dict) and item
         )
-        return f'DISTINCT ON ({cols}) '
+        return f'{self._kw("DISTINCT ON")} ({cols}) '
 
     @staticmethod
     def _indent_continuation(
@@ -859,7 +900,7 @@ class Formatter(abc.ABC):
     def _join_keyword(self, node: dict) -> str:
         join_type = node.get('jointype', 'JOIN_INNER')
         is_natural = node.get('isNatural', False)
-        prefix = 'NATURAL ' if is_natural else ''
+        prefix = f'{self._kw("NATURAL")} ' if is_natural else ''
         match join_type:
             case 'JOIN_INNER':
                 has_condition = (
@@ -867,18 +908,18 @@ class Formatter(abc.ABC):
                     or node.get('usingClause') is not None
                 )
                 if not has_condition and not is_natural:
-                    return f'{prefix}CROSS JOIN'
+                    return f'{prefix}{self._kw("CROSS JOIN")}'
                 if self._is_plain_join(node):
-                    return f'{prefix}JOIN'
-                return f'{prefix}INNER JOIN'
+                    return f'{prefix}{self._kw("JOIN")}'
+                return f'{prefix}{self._kw("INNER JOIN")}'
             case 'JOIN_LEFT':
-                return f'{prefix}LEFT JOIN'
+                return f'{prefix}{self._kw("LEFT JOIN")}'
             case 'JOIN_RIGHT':
-                return f'{prefix}RIGHT JOIN'
+                return f'{prefix}{self._kw("RIGHT JOIN")}'
             case 'JOIN_FULL':
-                return f'{prefix}FULL JOIN'
+                return f'{prefix}{self._kw("FULL JOIN")}'
             case _:
-                return f'{prefix}JOIN'
+                return f'{prefix}{self._kw("JOIN")}'
 
     def _is_plain_join(self, node: dict) -> bool:
         """Check the source SQL to see if JOIN was written without INNER."""

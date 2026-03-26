@@ -43,10 +43,10 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         if from_clause:
             from_items = self._flatten_from(from_clause)
             content_pad = ' ' * (width + 1)
-            for idx, (kw, table, quals, is_qualified) in enumerate(
+            for idx, (kw, table, quals, using, is_qual) in enumerate(
                 from_items,
             ):
-                if not is_qualified:
+                if not is_qual:
                     lines.append(self._river_line(kw, table, width))
                     if quals is not None:
                         self._format_condition_clause(
@@ -54,6 +54,15 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                             quals,
                             width,
                             lines,
+                        )
+                    if using is not None:
+                        cols = ', '.join(self._extract_names(using))
+                        lines.append(
+                            self._river_line(
+                                'USING',
+                                f'({cols})',
+                                width,
+                            )
                         )
                 else:
                     if idx > 1:
@@ -65,6 +74,9 @@ class RiverFormatter(pgfmt.formatter.Formatter):
                             content_pad,
                             lines,
                         )
+                    if using is not None:
+                        cols = ', '.join(self._extract_names(using))
+                        lines.append(f'{content_pad}USING ({cols})')
 
         where = node.get('whereClause')
         if where:
@@ -584,10 +596,11 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             kw = self._join_keyword(join)
             right = self.deparse(join['rarg'])
             quals = join.get('quals')
+            using = join.get('usingClause')
             qualified = self._is_qualified_join(join)
-            items.append((kw, right, quals, qualified))
+            items.append((kw, right, quals, using, qualified))
         else:
-            items.append(('FROM', self.deparse(node), None, False))
+            items.append(('FROM', self.deparse(node), None, None, False))
 
     def _is_qualified_join(self, join: dict) -> bool:
         kw = self._join_keyword(join)

@@ -77,6 +77,8 @@ class Formatter(abc.ABC):
                 return self.format_view(node)
             case 'CreateStmt':
                 return self.format_create_table(node)
+            case 'CreateTableAsStmt':
+                return self.format_create_table_as(node)
             case _:
                 stmt_name = key.removesuffix('Stmt')
                 raise ValueError(f'Unsupported statement type: {stmt_name}')
@@ -104,6 +106,26 @@ class Formatter(abc.ABC):
     @abc.abstractmethod
     def format_create_table(self, node: dict) -> str:
         """Format a CREATE TABLE statement."""
+
+    def format_create_table_as(self, node: dict) -> str:
+        """Format CREATE TABLE AS or CREATE MATERIALIZED VIEW AS."""
+        objtype = node.get('objtype', '')
+        into = node['into']
+        rel = into['rel']
+        name = self._deparse_range_var(rel, include_alias=False)
+        query = node['query']
+        inner = self._format_statement(query)
+
+        if objtype == 'OBJECT_MATVIEW':
+            header = f'CREATE MATERIALIZED VIEW {name} AS'
+        else:
+            header = f'CREATE TABLE {name} AS'
+
+        suffix = ''
+        if into.get('skipData'):
+            suffix = '\nWITH NO DATA'
+
+        return f'{header}\n{inner}{suffix}'
 
     # ------------------------------------------------------------------
     # Shared deparsing: AST node -> inline SQL text
@@ -182,6 +204,8 @@ class Formatter(abc.ABC):
                 return self._deparse_boolean_test(node)
             case 'RangeFunction':
                 return self._deparse_range_function(node)
+            case 'SQLValueFunction':
+                return self._deparse_sql_value_function(node)
             case 'ColumnDef':
                 return self._deparse_column_def(node)
             case 'Constraint':
@@ -503,6 +527,23 @@ class Formatter(abc.ABC):
                 parts.append(name)
         return ', '.join(parts)
 
+    @staticmethod
+    def _deparse_sql_value_function(node: dict) -> str:
+        op = node.get('op', '')
+        return {
+            'SVFOP_CURRENT_TIMESTAMP': 'CURRENT_TIMESTAMP',
+            'SVFOP_CURRENT_DATE': 'CURRENT_DATE',
+            'SVFOP_CURRENT_TIME': 'CURRENT_TIME',
+            'SVFOP_CURRENT_USER': 'CURRENT_USER',
+            'SVFOP_SESSION_USER': 'SESSION_USER',
+            'SVFOP_LOCALTIME': 'LOCALTIME',
+            'SVFOP_LOCALTIMESTAMP': 'LOCALTIMESTAMP',
+            'SVFOP_CURRENT_ROLE': 'CURRENT_ROLE',
+            'SVFOP_CURRENT_CATALOG': 'CURRENT_CATALOG',
+            'SVFOP_CURRENT_SCHEMA': 'CURRENT_SCHEMA',
+            'SVFOP_USER': 'USER',
+        }.get(op, op.removeprefix('SVFOP_'))
+
     def _deparse_range_function(self, node: dict) -> str:
         functions = node.get('functions', [])
         parts = []
@@ -561,6 +602,10 @@ class Formatter(abc.ABC):
         quals = node.get('quals')
         if quals:
             result += f' ON {self.deparse(quals)}'
+        using = node.get('usingClause')
+        if using:
+            cols = ', '.join(self._extract_names(using))
+            result += f' USING ({cols})'
         return result
 
     # ------------------------------------------------------------------
@@ -643,7 +688,11 @@ class Formatter(abc.ABC):
         prefix = 'NATURAL ' if is_natural else ''
         match join_type:
             case 'JOIN_INNER':
-                if node.get('quals') is None and not is_natural:
+                has_condition = (
+                    node.get('quals') is not None
+                    or node.get('usingClause') is not None
+                )
+                if not has_condition and not is_natural:
                     return f'{prefix}CROSS JOIN'
                 if self._is_plain_join(node):
                     return f'{prefix}JOIN'

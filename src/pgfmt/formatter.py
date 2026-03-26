@@ -74,6 +74,8 @@ class Formatter(abc.ABC):
                 return self.format_delete(node)
             case 'ViewStmt':
                 return self.format_view(node)
+            case 'CreateStmt':
+                return self.format_create_table(node)
             case _:
                 stmt_name = key.removesuffix('Stmt')
                 raise ValueError(f'Unsupported statement type: {stmt_name}')
@@ -97,6 +99,10 @@ class Formatter(abc.ABC):
     @abc.abstractmethod
     def format_view(self, node: dict) -> str:
         """Format a CREATE VIEW statement."""
+
+    @abc.abstractmethod
+    def format_create_table(self, node: dict) -> str:
+        """Format a CREATE TABLE statement."""
 
     # ------------------------------------------------------------------
     # Shared deparsing: AST node -> inline SQL text
@@ -175,6 +181,10 @@ class Formatter(abc.ABC):
                 return self._deparse_boolean_test(node)
             case 'RangeFunction':
                 return self._deparse_range_function(node)
+            case 'ColumnDef':
+                return self._deparse_column_def(node)
+            case 'Constraint':
+                return self._deparse_constraint(node)
             case 'SetToDefault':
                 return 'DEFAULT'
             case _:
@@ -380,6 +390,110 @@ class Formatter(abc.ABC):
             if alias:
                 result += f' AS {alias["aliasname"]}'
         return result
+
+    def _deparse_column_def(self, node: dict) -> str:
+        name = node['colname']
+        type_name = self._deparse_type_name(node['typeName'])
+        parts = [name, type_name]
+        for cons in node.get('constraints', []):
+            c = cons['Constraint']
+            parts.append(self._deparse_column_constraint(c))
+        return ' '.join(parts)
+
+    def _deparse_column_constraint(self, node: dict) -> str:
+        contype = node.get('contype', '')
+        match contype:
+            case 'CONSTR_NOTNULL':
+                return 'NOT NULL'
+            case 'CONSTR_NULL':
+                return 'NULL'
+            case 'CONSTR_DEFAULT':
+                expr = self.deparse(node.get('raw_expr'))
+                return f'DEFAULT {expr}'
+            case 'CONSTR_PRIMARY':
+                return 'PRIMARY KEY'
+            case 'CONSTR_UNIQUE':
+                return 'UNIQUE'
+            case 'CONSTR_CHECK':
+                expr = self.deparse(node.get('raw_expr'))
+                conname = node.get('conname')
+                if conname:
+                    return f'CONSTRAINT {conname} CHECK ({expr})'
+                return f'CHECK ({expr})'
+            case 'CONSTR_FOREIGN':
+                return self._deparse_fk_constraint(node)
+            case _:
+                return ''
+
+    def _deparse_constraint(self, node: dict) -> str:
+        """Deparse a table-level constraint."""
+        contype = node.get('contype', '')
+        conname = node.get('conname')
+        prefix = f'CONSTRAINT {conname} ' if conname else ''
+        match contype:
+            case 'CONSTR_PRIMARY':
+                keys = self._extract_names(node.get('keys', []))
+                return f'{prefix}PRIMARY KEY ({", ".join(keys)})'
+            case 'CONSTR_UNIQUE':
+                keys = self._extract_names(node.get('keys', []))
+                return f'{prefix}UNIQUE ({", ".join(keys)})'
+            case 'CONSTR_CHECK':
+                expr = self.deparse(node.get('raw_expr'))
+                return f'{prefix}CHECK ({expr})'
+            case 'CONSTR_FOREIGN':
+                fk_attrs = self._extract_names(node.get('fk_attrs', []))
+                result = f'{prefix}FOREIGN KEY ({", ".join(fk_attrs)})'
+                result += ' ' + self._deparse_fk_constraint(node)
+                return result
+            case _:
+                return ''
+
+    def _deparse_fk_constraint(self, node: dict) -> str:
+        pktable = node['pktable']
+        pk_name = self._deparse_range_var(
+            pktable,
+            include_alias=False,
+        )
+        pk_attrs = self._extract_names(node.get('pk_attrs', []))
+        result = f'REFERENCES {pk_name}'
+        if pk_attrs:
+            result += f' ({", ".join(pk_attrs)})'
+        fk_actions = {
+            'a': None,
+            'r': 'RESTRICT',
+            'c': 'CASCADE',
+            'n': 'SET NULL',
+            'd': 'SET DEFAULT',
+        }
+        del_action = fk_actions.get(node.get('fk_del_action', 'a'))
+        upd_action = fk_actions.get(node.get('fk_upd_action', 'a'))
+        if del_action:
+            result += f' ON DELETE {del_action}'
+        if upd_action:
+            result += f' ON UPDATE {upd_action}'
+        return result
+
+    def _deparse_storage_options(
+        self,
+        options: list[dict],
+    ) -> str:
+        parts = []
+        for opt in options:
+            elem = opt['DefElem']
+            name = elem['defname']
+            ns = elem.get('defnamespace')
+            if ns:
+                name = f'{ns}.{name}'
+            arg = elem.get('arg')
+            if arg and 'String' in arg:
+                val = arg['String']['sval']
+                parts.append(f"{name}='{val}'")
+            elif arg and 'Integer' in arg:
+                val = arg['Integer']['ival']
+                parts.append(f'{name}={val}')
+            else:
+                parts.append(name)
+        return ', '.join(parts)
 
     def _deparse_range_function(self, node: dict) -> str:
         functions = node.get('functions', [])

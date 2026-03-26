@@ -192,6 +192,28 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         return '\n'.join(lines)
 
+    def format_create_table(self, node: dict) -> str:
+        relation = node['relation']
+        name = self._deparse_range_var(
+            relation,
+            include_alias=False,
+        )
+        elts = node.get('tableElts', [])
+        options = node.get('options')
+
+        lines = [f'CREATE TABLE {name} (']
+        for i, elt in enumerate(elts):
+            item = self.deparse(elt)
+            suffix = ',' if i < len(elts) - 1 else ''
+            lines.append(f'{INDENT}{item}{suffix}')
+        lines.append(')')
+
+        if options:
+            opts = self._deparse_storage_options(options)
+            lines[-1] += f'\nWITH ({opts})'
+
+        return '\n'.join(lines)
+
     def format_view(self, node: dict) -> str:
         view = node['view']
         name = self._deparse_range_var(

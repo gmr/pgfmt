@@ -189,14 +189,10 @@ class Formatter(abc.ABC):
                         f'    {elem["arg"]["String"]["sval"].upper()}'
                     )
                 case 'security':
-                    val = elem['arg']['Integer']['ival']
-                    sec = (
-                        'SECURITY DEFINER' if val == 1 else 'SECURITY INVOKER'
-                    )
-                    lines.append(f'    {sec}')
+                    if self._defelem_is_true(elem):
+                        lines.append('    SECURITY DEFINER')
                 case 'strict':
-                    val = elem['arg']['Integer']['ival']
-                    if val == 1:
+                    if self._defelem_is_true(elem):
                         lines.append('    STRICT')
                 case 'set':
                     ve = elem['arg']['VariableSetStmt']
@@ -212,6 +208,15 @@ class Formatter(abc.ABC):
             lines.append('$$')
 
         return '\n'.join(lines)
+
+    @staticmethod
+    def _defelem_is_true(elem: dict) -> bool:
+        arg = elem.get('arg', {})
+        if 'Boolean' in arg:
+            return bool(arg['Boolean'].get('boolval'))
+        if 'Integer' in arg:
+            return arg['Integer'].get('ival') == 1
+        return bool(arg)
 
     def _passthrough(self, wrapper: dict | None) -> str:
         """Return the original SQL normalized to a single line."""

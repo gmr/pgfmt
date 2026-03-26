@@ -79,6 +79,8 @@ class Formatter(abc.ABC):
                 return self.format_create_table(node)
             case 'CreateTableAsStmt':
                 return self.format_create_table_as(node)
+            case 'CreateFunctionStmt':
+                return self.format_create_function(node)
             case _:
                 stmt_name = key.removesuffix('Stmt')
                 raise ValueError(f'Unsupported statement type: {stmt_name}')
@@ -126,6 +128,79 @@ class Formatter(abc.ABC):
             suffix = '\nWITH NO DATA'
 
         return f'{header}\n{inner}{suffix}'
+
+    def format_create_function(self, node: dict) -> str:
+        """Format CREATE FUNCTION / CREATE PROCEDURE."""
+        func_name = '.'.join(self._extract_names(node.get('funcname', [])))
+        params = node.get('parameters', []) or []
+        param_strs = []
+        for p in params:
+            fp = p.get('FunctionParameter', p)
+            parts = []
+            mode = fp.get('mode')
+            if mode == 'FUNC_PARAM_OUT':
+                parts.append('OUT')
+            elif mode == 'FUNC_PARAM_INOUT':
+                parts.append('INOUT')
+            elif mode == 'FUNC_PARAM_VARIADIC':
+                parts.append('VARIADIC')
+            pname = fp.get('name')
+            if pname:
+                parts.append(pname)
+            if 'argType' in fp:
+                parts.append(self._deparse_type_name(fp['argType']))
+            if 'defexpr' in fp:
+                parts.append(f'DEFAULT {self.deparse(fp["defexpr"])}')
+            param_strs.append(' '.join(parts))
+
+        ret_type = node.get('returnType')
+        returns = ''
+        if ret_type:
+            returns = f' RETURNS {self._deparse_type_name(ret_type)}'
+
+        lines = [
+            f'CREATE FUNCTION {func_name}({", ".join(param_strs)}){returns}'
+        ]
+
+        options = node.get('options', [])
+        body = None
+        for opt in options:
+            elem = opt['DefElem']
+            match elem['defname']:
+                case 'language':
+                    lang = elem['arg']['String']['sval']
+                    lines.append(f'    LANGUAGE {lang}')
+                case 'as':
+                    items = elem['arg']['List']['items']
+                    body = items[0]['String']['sval']
+                case 'volatility':
+                    lines.append(
+                        f'    {elem["arg"]["String"]["sval"].upper()}'
+                    )
+                case 'security':
+                    val = elem['arg']['Integer']['ival']
+                    sec = (
+                        'SECURITY DEFINER' if val == 1 else 'SECURITY INVOKER'
+                    )
+                    lines.append(f'    {sec}')
+                case 'strict':
+                    val = elem['arg']['Integer']['ival']
+                    if val == 1:
+                        lines.append('    STRICT')
+                case 'set':
+                    ve = elem['arg']['VariableSetStmt']
+                    vname = ve.get('name', '')
+                    vargs = ', '.join(
+                        self.deparse(a) for a in ve.get('args', [])
+                    )
+                    lines.append(f'    SET {vname} TO {vargs}')
+
+        if body is not None:
+            lines.append('    AS $$')
+            lines.append(body.rstrip())
+            lines.append('$$')
+
+        return '\n'.join(lines)
 
     # ------------------------------------------------------------------
     # Shared deparsing: AST node -> inline SQL text

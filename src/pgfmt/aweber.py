@@ -41,6 +41,38 @@ class AWeberFormatter(pgfmt.river.RiverFormatter):
                 all_keywords.extend(self._collect_select_keywords(inner))
         return max(len(k) for k in all_keywords)
 
+    def _deparse_case_expr(self, node: dict) -> str:
+        case_kw = self._kw('CASE')
+        when_kw = self._kw('WHEN')
+        then_kw = self._kw('THEN')
+        else_kw = self._kw('ELSE')
+        end_kw = self._kw('END')
+
+        if 'arg' in node:
+            first = f'{case_kw} {self.deparse(node["arg"])} '
+            pad = ' ' * len(first)
+        else:
+            first = f'{case_kw} '
+            pad = ' ' * len(first)
+
+        lines = []
+        for i, when in enumerate(node.get('args', [])):
+            w = when['CaseWhen']
+            expr = self.deparse(w['expr'])
+            result = self.deparse(w['result'])
+            clause = f'{when_kw} {expr} {then_kw} {result}'
+            if i == 0:
+                lines.append(f'{first}{clause}')
+            else:
+                lines.append(f'{pad}{clause}')
+
+        if 'defresult' in node:
+            lines.append(f'{pad}{else_kw} {self.deparse(node["defresult"])}')
+
+        end_pad = ' ' * (len(case_kw) - len(end_kw))
+        lines.append(f'{end_pad}{end_kw}')
+        return '\n'.join(lines)
+
     def _is_qualified_join(self, join: dict) -> bool:
         return False
 

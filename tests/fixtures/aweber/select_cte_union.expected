@@ -1,0 +1,43 @@
+WITH active_items AS (
+  SELECT i.created_at AS logged_at,
+         i.created_by AS author,
+         'created' AS action,
+         i.id AS item_id,
+         i.name AS item_name
+    FROM items AS i
+   WHERE i.modified_at IS NULL
+ORDER BY i.created_at DESC
+   LIMIT 100
+),
+modified_items AS (
+  SELECT i.modified_at AS logged_at,
+         i.modified_by AS author,
+         'updated' AS action,
+         i.id AS item_id,
+         i.name AS item_name
+    FROM items AS i
+   WHERE i.modified_at IS NOT NULL
+ORDER BY i.modified_at DESC
+   LIMIT 100
+),
+combined AS (
+SELECT *
+  FROM active_items
+
+UNION
+
+SELECT *
+  FROM modified_items
+)
+  SELECT c.author,
+         u.display_name,
+         c.action,
+         c.item_id,
+         c.item_name,
+         MAX(logged_at) AS logged_at
+    FROM combined AS c
+    JOIN users AS u
+      ON u.username = c.author
+GROUP BY c.author, u.display_name, c.action, c.item_id, c.item_name
+ORDER BY MAX(c.logged_at) DESC
+   LIMIT 100;

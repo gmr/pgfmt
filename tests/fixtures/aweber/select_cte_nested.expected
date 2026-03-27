@@ -1,0 +1,44 @@
+WITH totals AS (
+   SELECT account_id,
+          SUM(amount) AS lifetime_value
+     FROM public.invoices
+    WHERE status = 'Paid'
+ GROUP BY account_id
+),
+latest_emails AS (
+WITH ranked AS (
+   SELECT contact_id,
+          email::TEXT AS email,
+          RANK() OVER (PARTITION BY contact_id ORDER BY id DESC) AS rank
+     FROM public.contact_emails
+)
+   SELECT contact_id,
+          email
+     FROM ranked
+    WHERE rank = 1
+),
+current_plan AS (
+   SELECT a.account_id,
+          p.plan_name,
+          CASE WHEN p.plan_name ~ 'Free' THEN TRUE
+               ELSE FALSE
+           END AS is_free
+     FROM public.accounts AS a
+     JOIN public.packages AS p
+    USING (pkg_id)
+    WHERE a.status_id <> 7
+)
+   SELECT a.account_id,
+          a.date_opened,
+          CASE WHEN cp.is_free THEN 'Free'
+               ELSE 'Paid'
+           END AS account_type,
+          COALESCE(t.lifetime_value, 0.00) AS lifetime_value,
+          le.email AS contact_email
+     FROM public.accounts AS a
+     JOIN current_plan AS cp
+    USING (account_id)
+LEFT JOIN totals AS t
+    USING (account_id)
+LEFT JOIN latest_emails AS le
+    USING (contact_id);

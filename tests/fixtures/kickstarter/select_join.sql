@@ -1,0 +1,1 @@
+SELECT p.name AS project_name, COUNT(b.id) AS backing_count FROM app.projects AS p INNER JOIN app.backings AS b ON p.id = b.project_id AND b.country != 'US' LEFT JOIN app.rewards AS rewards ON b.id = rewards.backing_id WHERE p.country = 'US' AND p.deadline >= '2015-01-01'

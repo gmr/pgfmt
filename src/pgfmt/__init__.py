@@ -34,6 +34,14 @@ def format(sql: str, style: str = 'river') -> str:
             from pgfmt.dbt import DbtFormatter
 
             formatter = DbtFormatter()
+        case 'kickstarter':
+            from pgfmt.kickstarter import KickstarterFormatter
+
+            formatter = KickstarterFormatter()
+        case 'gitlab':
+            from pgfmt.gitlab import GitLabFormatter
+
+            formatter = GitLabFormatter()
         case _:
             raise ValueError(f'Unsupported style: {style!r}')
     return formatter.format(sql)

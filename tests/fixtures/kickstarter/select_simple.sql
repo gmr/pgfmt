@@ -1,0 +1,1 @@
+SELECT id, name, email, created_at FROM app.users WHERE active = TRUE ORDER BY created_at DESC LIMIT 10

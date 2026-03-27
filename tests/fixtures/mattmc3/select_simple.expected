@@ -1,0 +1,6 @@
+select p.name
+     , p.product_number
+     , p.color
+     , p.list_price
+  from products as p
+ where p.list_price < 800.00;

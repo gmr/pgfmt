@@ -394,9 +394,9 @@ class Formatter(abc.ABC):
         if node.get('isnull'):
             return self._kw('NULL')
         if 'ival' in node:
-            return str(node['ival']['ival'])
+            return str(node['ival'].get('ival', 0))
         if 'fval' in node:
-            return node['fval']['fval']
+            return node['fval'].get('fval', '0')
         if 'sval' in node:
             val = node['sval']['sval']
             escaped = val.replace("'", "''")

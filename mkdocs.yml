@@ -62,3 +62,6 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - CLI Reference: cli.md
+  - Python API: api.md
+  - Style Reference: styles.md

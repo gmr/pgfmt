@@ -1,15 +1,19 @@
-import pgfmt.formatter
+import pgfmt.mozilla
 
-INDENT = '    '
+INDENT = '  '
 
 
-class MozillaFormatter(pgfmt.formatter.Formatter):
-    """Format SQL using the Mozilla style.
+class KickstarterFormatter(pgfmt.mozilla.MozillaFormatter):
+    """Format SQL using the Kickstarter style.
 
-    Keywords are left-aligned at column 0 with content indented
-    4 spaces underneath.  Each item gets its own line.  AND/OR
-    appear at the start of a line under WHERE.
+    Mozilla-like with 2-space indentation, JOIN + ON on the same
+    line, additional join conditions indented below, and compact
+    CTE chaining where `), name AS (` appears on one line.
     """
+
+    def _is_plain_join(self, node: dict) -> bool:
+        """Always use explicit INNER JOIN."""
+        return False
 
     def format_select(self, node: dict, indent: int = 0) -> str:
         pad = ' ' * indent
@@ -23,28 +27,43 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         lines: list[str] = []
 
-        with_clause = node.get('withClause')
-        if with_clause:
-            for i, cte_node in enumerate(
-                with_clause.get('ctes', []),
-            ):
-                cte = cte_node['CommonTableExpr']
-                name = cte['ctename']
-                query = cte['ctequery']
-                inner = self._format_statement(query)
-                kw = self._kw('WITH') if i == 0 else ''
-                sep = ',' if i < len(with_clause['ctes']) - 1 else ''
-                as_kw = self._kw('AS')
-                if kw:
-                    lines.append(f'{kw} {name} {as_kw} (')
-                else:
-                    lines.append(f'{name} {as_kw} (')
-                for sub in inner.split('\n'):
-                    lines.append(f'{INDENT}{sub}')
-                lines.append(f'){sep}')
-                if not sep:
-                    lines.append('')
+        self._format_cte_compact(node.get('withClause'), lines)
+        self._format_select_targets(node, lines)
+        self._format_from_clause(node.get('fromClause', []), lines)
+        self._format_trailing_clauses(node, lines)
 
+        return '\n'.join(f'{pad}{line}' for line in lines)
+
+    def _format_cte_compact(
+        self,
+        with_clause: dict | None,
+        lines: list[str],
+    ) -> None:
+        """Format CTEs with compact chaining: `), name AS (`."""
+        if not with_clause:
+            return
+        ctes = with_clause.get('ctes', [])
+        for i, cte_node in enumerate(ctes):
+            cte = cte_node['CommonTableExpr']
+            name = cte['ctename']
+            query = cte['ctequery']
+            inner = self._format_statement(query)
+            as_kw = self._kw('AS')
+            if i == 0:
+                kw = self._kw('WITH')
+                lines.append(f'{kw} {name} {as_kw} (')
+            else:
+                lines.append(f'), {name} {as_kw} (')
+            for sub in inner.split('\n'):
+                lines.append(f'{INDENT}{sub}')
+        lines.append(')')
+
+    def _format_select_targets(
+        self,
+        node: dict,
+        lines: list[str],
+    ) -> None:
+        """Format the SELECT keyword and target list."""
         distinct = self._format_distinct(
             node.get('distinctClause'),
         )
@@ -59,65 +78,97 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                 suffix = ',' if i < len(targets) - 1 else ''
                 lines.append(f'{INDENT}{pfx}{t}{suffix}')
 
-        from_clause = node.get('fromClause', [])
-        if from_clause:
-            from_kw = self._kw('FROM')
-            from_items = self._flatten_from(from_clause)
-            for kw, table, quals, using in from_items:
-                has_joins = len(from_items) > 1
-                if kw == ',':
-                    lines[-1] += ','
-                    lines.append(f'{INDENT}{table}')
-                elif kw == from_kw and not has_joins:
-                    lines.append(f'{from_kw} {table}')
-                elif kw == from_kw:
-                    lines.append(from_kw)
-                    lines.append(f'{INDENT}{table}')
-                else:
-                    lines.append(kw)
-                    lines.append(f'{INDENT}{table}')
-                if quals is not None:
-                    self._format_on(quals, lines)
-                if using is not None:
-                    cols = ', '.join(self._extract_names(using))
-                    self._append_indented(
-                        f'{self._kw("USING")} ({cols})',
-                        lines,
-                    )
+    def _format_from_clause(
+        self,
+        from_clause: list[dict],
+        lines: list[str],
+    ) -> None:
+        """Format the FROM clause with inline JOIN ... ON."""
+        if not from_clause:
+            return
+        from_kw = self._kw('FROM')
+        from_items = self._flatten_from(from_clause)
+        for kw, table, quals, using in from_items:
+            if kw == ',':
+                lines[-1] += ','
+                lines.append(f'{INDENT}{table}')
+            elif kw == from_kw:
+                lines.append(f'{from_kw} {table}')
+            else:
+                self._format_join_item(
+                    kw,
+                    table,
+                    quals,
+                    using,
+                    lines,
+                )
+                continue
+            self._format_item_clauses(quals, using, lines)
 
+    def _format_join_item(
+        self,
+        kw: str,
+        table: str,
+        quals: dict | None,
+        using: list | None,
+        lines: list[str],
+    ) -> None:
+        """Format a single JOIN item with ON on the same line."""
+        if quals is not None:
+            self._format_join_on_same_line(
+                kw,
+                table,
+                quals,
+                lines,
+            )
+        else:
+            lines.append(f'{kw} {table}')
+        if using is not None:
+            cols = ', '.join(self._extract_names(using))
+            lines.append(
+                f'{INDENT}{self._kw("USING")} ({cols})',
+            )
+
+    def _format_item_clauses(
+        self,
+        quals: dict | None,
+        using: list | None,
+        lines: list[str],
+    ) -> None:
+        """Format ON/USING for non-JOIN from items."""
+        if quals is not None:
+            self._format_on(quals, lines)
+        if using is not None:
+            cols = ', '.join(self._extract_names(using))
+            lines.append(
+                f'{INDENT}{self._kw("USING")} ({cols})',
+            )
+
+    def _format_trailing_clauses(
+        self,
+        node: dict,
+        lines: list[str],
+    ) -> None:
+        """Format WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, OFFSET."""
         where = node.get('whereClause')
         if where:
             self._format_where(where, lines)
 
-        group = node.get('groupClause')
-        if group:
-            group_kw = self._kw('GROUP BY')
-            if len(group) == 1:
-                lines.append(f'{group_kw} {self.deparse(group[0])}')
-            else:
-                lines.append(group_kw)
-                for i, g in enumerate(group):
-                    suffix = ',' if i < len(group) - 1 else ''
-                    lines.append(
-                        f'{INDENT}{self.deparse(g)}{suffix}',
-                    )
+        self._format_keyword_list(
+            'GROUP BY',
+            node.get('groupClause'),
+            lines,
+        )
 
         having = node.get('havingClause')
         if having:
             self._format_having(having, lines)
 
-        sort = node.get('sortClause')
-        if sort:
-            order_kw = self._kw('ORDER BY')
-            if len(sort) == 1:
-                lines.append(f'{order_kw} {self.deparse(sort[0])}')
-            else:
-                lines.append(order_kw)
-                for i, s in enumerate(sort):
-                    suffix = ',' if i < len(sort) - 1 else ''
-                    lines.append(
-                        f'{INDENT}{self.deparse(s)}{suffix}',
-                    )
+        self._format_keyword_list(
+            'ORDER BY',
+            node.get('sortClause'),
+            lines,
+        )
 
         limit = node.get('limitCount')
         if limit:
@@ -131,7 +182,25 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
                 f'{self._kw("OFFSET")} {self.deparse(offset)}',
             )
 
-        return '\n'.join(f'{pad}{line}' for line in lines)
+    def _format_keyword_list(
+        self,
+        keyword: str,
+        items: list | None,
+        lines: list[str],
+    ) -> None:
+        """Format a keyword followed by a comma-separated list."""
+        if not items:
+            return
+        kw = self._kw(keyword)
+        if len(items) == 1:
+            lines.append(f'{kw} {self.deparse(items[0])}')
+        else:
+            lines.append(kw)
+            for i, item in enumerate(items):
+                suffix = ',' if i < len(items) - 1 else ''
+                lines.append(
+                    f'{INDENT}{self.deparse(item)}{suffix}',
+                )
 
     def format_insert(self, node: dict) -> str:
         relation = self._deparse_range_var(
@@ -249,29 +318,19 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         if options:
             opts = self._deparse_storage_options(options)
-            lines[-1] += f'\n{self._kw("WITH")} ({opts})'
+            lines[-1] += f'\nWITH ({opts})'
 
         if foreign_server:
-            lines.append(f'{self._kw("SERVER")} {foreign_server}')
+            lines.append(f'SERVER {foreign_server}')
 
         if foreign_options:
             opt_lines = self._format_foreign_options(
                 foreign_options,
                 INDENT,
             )
-            lines.append(f'{self._kw("OPTIONS")} (\n{opt_lines}\n)')
+            lines.append(f'OPTIONS (\n{opt_lines}\n)')
 
         return '\n'.join(lines)
-
-    def format_view(self, node: dict) -> str:
-        view = node['view']
-        name = self._deparse_range_var(
-            view,
-            include_alias=False,
-        )
-        query = node['query']
-        inner = self._format_statement(query)
-        return f'{self._kw("CREATE VIEW")} {name} {self._kw("AS")}\n{inner}'
 
     # ------------------------------------------------------------------
     # Subquery formatting
@@ -313,116 +372,32 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
         for sub in content.split('\n'):
             lines.append(f'{INDENT}{sub}')
 
-    def _format_where(
+    def _format_join_on_same_line(
         self,
-        node: dict,
+        join_kw: str,
+        table: str,
+        quals: dict,
         lines: list[str],
     ) -> None:
-        if 'BoolExpr' in node:
-            bool_expr = node['BoolExpr']
+        """Format JOIN ... ON on one line with AND indented below."""
+        if 'BoolExpr' in quals:
+            bool_expr = quals['BoolExpr']
             boolop = bool_expr['boolop']
             if boolop in ('AND_EXPR', 'OR_EXPR'):
                 op_kw = self._kw(
                     'AND' if boolop == 'AND_EXPR' else 'OR',
                 )
-                args = self._flatten_bool_expr(node, boolop)
-                lines.append(self._kw('WHERE'))
-                self._append_indented(
-                    self.deparse(args[0]),
-                    lines,
+                args = self._flatten_bool_expr(quals, boolop)
+                on_kw = self._kw('ON')
+                lines.append(
+                    f'{join_kw} {table} {on_kw} {self.deparse(args[0])}',
                 )
                 for arg in args[1:]:
-                    self._append_indented(
-                        f'{op_kw} {self.deparse(arg)}',
-                        lines,
+                    lines.append(
+                        f'{INDENT}{op_kw} {self.deparse(arg)}',
                     )
                 return
-        lines.append(self._kw('WHERE'))
-        self._append_indented(self.deparse(node), lines)
-
-    def _format_having(
-        self,
-        node: dict,
-        lines: list[str],
-    ) -> None:
-        lines.append(self._kw('HAVING'))
-        self._append_indented(self.deparse(node), lines)
-
-    def _format_on(
-        self,
-        node: dict,
-        lines: list[str],
-    ) -> None:
-        if 'BoolExpr' in node:
-            bool_expr = node['BoolExpr']
-            boolop = bool_expr['boolop']
-            if boolop in ('AND_EXPR', 'OR_EXPR'):
-                op_kw = self._kw(
-                    'AND' if boolop == 'AND_EXPR' else 'OR',
-                )
-                args = self._flatten_bool_expr(node, boolop)
-                self._append_indented(
-                    f'{self._kw("ON")} {self.deparse(args[0])}',
-                    lines,
-                )
-                for arg in args[1:]:
-                    self._append_indented(
-                        f'{op_kw} {self.deparse(arg)}',
-                        lines,
-                    )
-                return
-        self._append_indented(
-            f'{self._kw("ON")} {self.deparse(node)}',
-            lines,
+        on_kw = self._kw('ON')
+        lines.append(
+            f'{join_kw} {table} {on_kw} {self.deparse(quals)}',
         )
-
-    def _flatten_from(
-        self,
-        from_clause: list[dict],
-    ) -> list:
-        items = []
-        for node in from_clause:
-            self._flatten_from_node(
-                node,
-                items,
-                is_first=not items,
-            )
-        return items
-
-    def _flatten_from_node(
-        self,
-        node: dict,
-        items: list,
-        is_first: bool = False,
-    ) -> None:
-        if 'JoinExpr' in node:
-            join = node['JoinExpr']
-            self._flatten_from_node(
-                join['larg'],
-                items,
-                is_first=is_first,
-            )
-            kw = self._join_keyword(join)
-            right = self.deparse(join['rarg'])
-            quals = join.get('quals')
-            using = join.get('usingClause')
-            items.append((kw, right, quals, using))
-        else:
-            kw = self._kw('FROM') if is_first else ','
-            items.append((kw, self.deparse(node), None, None))
-
-    def _set_op_keyword(self, node: dict) -> str:
-        op = node.get('op', 'SETOP_NONE')
-        is_all = node.get('all', False)
-        match op:
-            case 'SETOP_UNION':
-                base = self._kw('UNION')
-            case 'SETOP_INTERSECT':
-                base = self._kw('INTERSECT')
-            case 'SETOP_EXCEPT':
-                base = self._kw('EXCEPT')
-            case _:
-                return ''
-        if is_all:
-            return f'{base} {self._kw("ALL")}'
-        return base

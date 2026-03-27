@@ -1,0 +1,8 @@
+select r.last_name
+  from riders as r
+  join bikes as b
+    on r.bike_vin_num = b.vin_num
+   and b.engines > 2
+  join crew as c
+    on r.crew_chief_last_name = c.last_name
+   and c.chief = 'Y';

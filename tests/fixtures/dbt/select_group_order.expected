@@ -1,0 +1,12 @@
+select
+    x,
+    count(*) as cnt
+
+from t
+
+group by x
+
+having
+    count(*) > 1
+
+order by cnt desc;

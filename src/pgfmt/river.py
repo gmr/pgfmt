@@ -8,7 +8,12 @@ class RiverFormatter(pgfmt.formatter.Formatter):
     creating a visual "river" that separates keywords from content.
     """
 
-    def format_select(self, node: dict, indent: int = 0) -> str:
+    def format_select(
+        self,
+        node: dict,
+        indent: int = 0,
+        min_width: int = 0,
+    ) -> str:
         prefix = ' ' * indent
 
         op = node.get('op', 'SETOP_NONE')
@@ -18,13 +23,15 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             right = self.format_select(node['rarg'], indent)
             return f'{left}\n\n{prefix}{set_op}\n\n{right}'
 
+        keywords = self._collect_select_keywords(node)
+        width = max(len(k) for k in keywords)
+        width = max(width, min_width)
+
         cte_lines = self._format_with_clause(
             node.get('withClause'),
             indent,
+            min_width=min_width,
         )
-
-        keywords = self._collect_select_keywords(node)
-        width = max(len(k) for k in keywords)
         lines = []
 
         distinct = self._format_distinct(
@@ -435,6 +442,7 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         self,
         with_clause: dict | None,
         indent: int,
+        min_width: int = 0,
     ) -> str:
         if not with_clause:
             return ''
@@ -445,16 +453,34 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             cte = cte_node['CommonTableExpr']
             name = cte['ctename']
             query = cte['ctequery']
-            inner = self._format_statement(query)
-            kw = 'WITH' if i == 0 else ''
+            inner_node = query.get('SelectStmt', query)
+            inner = self._format_cte_body(
+                inner_node,
+                min_width,
+            )
+            kw = self._kw('WITH') if i == 0 else ''
             comma = ',' if i < len(ctes) - 1 else ''
             if kw:
                 parts.append(
-                    f'{prefix}{kw} {name} AS (\n{inner}\n{prefix}){comma}'
+                    f'{prefix}{kw} {name} {self._kw("AS")} '
+                    f'(\n{inner}\n{prefix}){comma}'
                 )
             else:
-                parts.append(f'{prefix}{name} AS (\n{inner}\n{prefix}){comma}')
+                parts.append(
+                    f'{prefix}{name} {self._kw("AS")} '
+                    f'(\n{inner}\n{prefix}){comma}'
+                )
         return '\n'.join(parts)
+
+    def _format_cte_body(
+        self,
+        inner_node: dict,
+        min_width: int,
+    ) -> str:
+        return self.format_select(
+            inner_node,
+            min_width=min_width,
+        )
 
     # ------------------------------------------------------------------
     # River formatting helpers

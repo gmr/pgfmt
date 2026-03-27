@@ -30,6 +30,22 @@ def format(sql: str, style: str = 'river') -> str:
             from pgfmt.aweber import AWeberFormatter
 
             formatter = AWeberFormatter()
+        case 'dbt':
+            from pgfmt.dbt import DbtFormatter
+
+            formatter = DbtFormatter()
+        case 'kickstarter':
+            from pgfmt.kickstarter import KickstarterFormatter
+
+            formatter = KickstarterFormatter()
+        case 'gitlab':
+            from pgfmt.gitlab import GitLabFormatter
+
+            formatter = GitLabFormatter()
+        case 'mattmc3':
+            from pgfmt.mattmc3 import Mattmc3Formatter
+
+            formatter = Mattmc3Formatter()
         case _:
             raise ValueError(f'Unsupported style: {style!r}')
     return formatter.format(sql)

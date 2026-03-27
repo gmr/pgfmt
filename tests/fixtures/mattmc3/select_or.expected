@@ -1,0 +1,6 @@
+select a.title
+     , a.released_on
+     , a.recorded_on
+  from albums as a
+ where a.title = 'Charcoal Lane'
+    or a.title = 'The New Danger';

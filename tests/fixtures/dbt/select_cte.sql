@@ -1,0 +1,1 @@
+WITH recent AS (SELECT id, name FROM users WHERE active = TRUE ORDER BY created_at DESC LIMIT 10) SELECT r.id, r.name, COUNT(o.id) AS order_count FROM recent AS r LEFT JOIN orders AS o ON r.id = o.user_id GROUP BY r.id, r.name

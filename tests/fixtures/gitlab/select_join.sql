@@ -1,0 +1,1 @@
+SELECT a.title, COUNT(*) AS cnt FROM albums AS a LEFT JOIN orders AS o ON a.id = o.album_id WHERE a.year > 2000 AND a.genre = 'rock' GROUP BY a.title HAVING COUNT(*) > 1 ORDER BY cnt DESC LIMIT 10

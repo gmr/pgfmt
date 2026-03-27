@@ -158,17 +158,3 @@ select a.title
  where a.title = 'Charcoal Lane'
    and a.year > 2000;
 ```
-
-## Supported Statements
-
-- `SELECT` (with JOINs, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, OFFSET,
-  DISTINCT, DISTINCT ON, UNION/INTERSECT/EXCEPT, subqueries, CTEs)
-- `INSERT` (VALUES, INSERT ... SELECT)
-- `UPDATE`
-- `DELETE`
-- `CREATE TABLE` (columns, constraints, WITH storage options)
-- `CREATE FOREIGN TABLE` (SERVER, OPTIONS)
-- `CREATE VIEW` / `CREATE MATERIALIZED VIEW`
-- `CREATE FUNCTION`
-- `CREATE DOMAIN`
-- Unsupported DDL passes through with normalized whitespace

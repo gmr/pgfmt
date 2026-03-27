@@ -6,12 +6,12 @@ WITH totals AS (
  GROUP BY account_id
 ),
 latest_emails AS (
-WITH ranked AS (
-   SELECT contact_id,
-          email::TEXT AS email,
-          RANK() OVER (PARTITION BY contact_id ORDER BY id DESC) AS rank
-     FROM public.contact_emails
-)
+     WITH ranked AS (
+          SELECT contact_id,
+                 email::TEXT AS email,
+                 RANK() OVER (PARTITION BY contact_id ORDER BY id DESC) AS rank
+            FROM public.contact_emails
+          )
    SELECT contact_id,
           email
      FROM ranked

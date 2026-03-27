@@ -23,15 +23,15 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             right = self.format_select(node['rarg'], indent)
             return f'{left}\n\n{prefix}{set_op}\n\n{right}'
 
+        keywords = self._collect_select_keywords(node)
+        width = max(len(k) for k in keywords)
+        width = max(width, min_width)
+
         cte_lines = self._format_with_clause(
             node.get('withClause'),
             indent,
             min_width=min_width,
         )
-
-        keywords = self._collect_select_keywords(node)
-        width = max(len(k) for k in keywords)
-        width = max(width, min_width)
         lines = []
 
         distinct = self._format_distinct(
@@ -454,19 +454,33 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             name = cte['ctename']
             query = cte['ctequery']
             inner_node = query.get('SelectStmt', query)
-            inner = self.format_select(
+            inner = self._format_cte_body(
                 inner_node,
-                min_width=min_width,
+                min_width,
             )
-            kw = 'WITH' if i == 0 else ''
+            kw = self._kw('WITH') if i == 0 else ''
             comma = ',' if i < len(ctes) - 1 else ''
             if kw:
                 parts.append(
-                    f'{prefix}{kw} {name} AS (\n{inner}\n{prefix}){comma}'
+                    f'{prefix}{kw} {name} {self._kw("AS")} '
+                    f'(\n{inner}\n{prefix}){comma}'
                 )
             else:
-                parts.append(f'{prefix}{name} AS (\n{inner}\n{prefix}){comma}')
+                parts.append(
+                    f'{prefix}{name} {self._kw("AS")} '
+                    f'(\n{inner}\n{prefix}){comma}'
+                )
         return '\n'.join(parts)
+
+    def _format_cte_body(
+        self,
+        inner_node: dict,
+        min_width: int,
+    ) -> str:
+        return self.format_select(
+            inner_node,
+            min_width=min_width,
+        )
 
     # ------------------------------------------------------------------
     # River formatting helpers

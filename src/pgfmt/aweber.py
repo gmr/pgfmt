@@ -29,6 +29,51 @@ class AWeberFormatter(pgfmt.river.RiverFormatter):
             min_width=min_width,
         )
 
+    def _format_cte_body(
+        self,
+        inner_node: dict,
+        min_width: int,
+    ) -> str:
+        """Format a CTE body, indenting nested CTEs to the river."""
+        nested_with = inner_node.get('withClause')
+        if not nested_with or min_width == 0:
+            return self.format_select(
+                inner_node,
+                min_width=min_width,
+            )
+        with_kw = self._kw('WITH')
+        as_kw = self._kw('AS')
+        kw_pad = ' ' * (min_width - len(with_kw))
+        content_col = min_width + 1
+        close_pad = ' ' * content_col
+        nested_ctes = nested_with.get('ctes', [])
+        parts = []
+        for i, cte_node in enumerate(nested_ctes):
+            cte = cte_node['CommonTableExpr']
+            name = cte['ctename']
+            query = cte['ctequery']
+            cte_inner = query.get('SelectStmt', query)
+            body = self.format_select(
+                cte_inner,
+                indent=content_col,
+            )
+            comma = ',' if i < len(nested_ctes) - 1 else ''
+            if i == 0:
+                parts.append(
+                    f'{kw_pad}{with_kw} {name} {as_kw} '
+                    f'(\n{body}\n{close_pad}){comma}'
+                )
+            else:
+                parts.append(f'{name} {as_kw} (\n{body}\n{close_pad}){comma}')
+        cte_text = '\n'.join(parts)
+        stripped = dict(inner_node)
+        stripped.pop('withClause', None)
+        main_body = self.format_select(
+            stripped,
+            min_width=min_width,
+        )
+        return f'{cte_text}\n{main_body}'
+
     def _unified_river_width(self, node: dict) -> int:
         """Compute the max river width across CTEs + outer query."""
         all_keywords = list(self._collect_select_keywords(node))

@@ -146,13 +146,15 @@ class Formatter(abc.ABC):
         inner = self._format_statement(query)
 
         if objtype == 'OBJECT_MATVIEW':
-            header = f'CREATE MATERIALIZED VIEW {name} AS'
+            prefix = self._kw('CREATE MATERIALIZED VIEW')
         else:
-            header = f'CREATE TABLE {name} AS'
+            prefix = self._kw('CREATE TABLE')
+        as_kw = self._kw('AS')
+        header = f'{prefix} {name} {as_kw}'
 
         suffix = ''
         if into.get('skipData'):
-            suffix = '\nWITH NO DATA'
+            suffix = f'\n{self._kw("WITH NO DATA")}'
 
         return f'{header}\n{inner}{suffix}'
 
@@ -166,27 +168,31 @@ class Formatter(abc.ABC):
             parts = []
             mode = fp.get('mode')
             if mode == 'FUNC_PARAM_OUT':
-                parts.append('OUT')
+                parts.append(self._kw('OUT'))
             elif mode == 'FUNC_PARAM_INOUT':
-                parts.append('INOUT')
+                parts.append(self._kw('INOUT'))
             elif mode == 'FUNC_PARAM_VARIADIC':
-                parts.append('VARIADIC')
+                parts.append(self._kw('VARIADIC'))
             pname = fp.get('name')
             if pname:
                 parts.append(pname)
             if 'argType' in fp:
                 parts.append(self._deparse_type_name(fp['argType']))
             if 'defexpr' in fp:
-                parts.append(f'DEFAULT {self.deparse(fp["defexpr"])}')
+                parts.append(
+                    f'{self._kw("DEFAULT")} {self.deparse(fp["defexpr"])}'
+                )
             param_strs.append(' '.join(parts))
 
         ret_type = node.get('returnType')
         returns = ''
         if ret_type:
-            returns = f' RETURNS {self._deparse_type_name(ret_type)}'
+            returns_kw = self._kw('RETURNS')
+            returns = f' {returns_kw} {self._deparse_type_name(ret_type)}'
 
+        create_func = self._kw('CREATE FUNCTION')
         lines = [
-            f'CREATE FUNCTION {func_name}({", ".join(param_strs)}){returns}'
+            f'{create_func} {func_name}({", ".join(param_strs)}){returns}'
         ]
 
         options = node.get('options', [])
@@ -196,30 +202,33 @@ class Formatter(abc.ABC):
             match elem['defname']:
                 case 'language':
                     lang = elem['arg']['String']['sval']
-                    lines.append(f'    LANGUAGE {lang}')
+                    language_kw = self._kw('LANGUAGE')
+                    lines.append(f'    {language_kw} {lang}')
                 case 'as':
                     items = elem['arg']['List']['items']
                     body = items[0]['String']['sval']
                 case 'volatility':
-                    lines.append(
-                        f'    {elem["arg"]["String"]["sval"].upper()}'
-                    )
+                    vol = elem['arg']['String']['sval'].upper()
+                    lines.append(f'    {self._kw(vol)}')
                 case 'security':
                     if self._defelem_is_true(elem):
-                        lines.append('    SECURITY DEFINER')
+                        lines.append(f'    {self._kw("SECURITY DEFINER")}')
                 case 'strict':
                     if self._defelem_is_true(elem):
-                        lines.append('    STRICT')
+                        lines.append(f'    {self._kw("STRICT")}')
                 case 'set':
                     ve = elem['arg']['VariableSetStmt']
                     vname = ve.get('name', '')
                     vargs = ', '.join(
                         self.deparse(a) for a in ve.get('args', [])
                     )
-                    lines.append(f'    SET {vname} TO {vargs}')
+                    set_kw = self._kw('SET')
+                    to_kw = self._kw('TO')
+                    lines.append(f'    {set_kw} {vname} {to_kw} {vargs}')
 
         if body is not None:
-            lines.append('    AS $$')
+            as_kw = self._kw('AS')
+            lines.append(f'    {as_kw} $$')
             lines.append(body.rstrip())
             lines.append('$$')
 
@@ -251,7 +260,9 @@ class Formatter(abc.ABC):
     def _format_create_domain(self, node: dict) -> str:
         name = '.'.join(self._extract_names(node.get('domainname', [])))
         base_type = self._deparse_type_name(node['typeName'])
-        lines = [f'CREATE DOMAIN {name} AS {base_type}']
+        create_domain = self._kw('CREATE DOMAIN')
+        as_kw = self._kw('AS')
+        lines = [f'{create_domain} {name} {as_kw} {base_type}']
         for cons in node.get('constraints', []):
             c = cons['Constraint']
             lines.append(f'    {self._deparse_column_constraint(c)}')
@@ -261,8 +272,11 @@ class Formatter(abc.ABC):
         user = node['user']
         rolename = user.get('rolename', 'PUBLIC')
         server = node['servername']
+        create_um = self._kw('CREATE USER MAPPING')
+        for_kw = self._kw('FOR')
+        server_kw = self._kw('SERVER')
         lines = [
-            f'CREATE USER MAPPING FOR {rolename} SERVER {server}',
+            f'{create_um} {for_kw} {rolename} {server_kw} {server}',
         ]
         options = node.get('options', [])
         if options:
@@ -276,7 +290,7 @@ class Formatter(abc.ABC):
                     opt_parts.append(f"    {name} '{val}'")
                 else:
                     opt_parts.append(f'    {name}')
-            lines.append('OPTIONS (')
+            lines.append(f'{self._kw("OPTIONS")} (')
             lines.append(',\n'.join(opt_parts))
             lines.append(')')
         return '\n'.join(lines)

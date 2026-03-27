@@ -294,17 +294,17 @@ class GitLabFormatter(pgfmt.mozilla.MozillaFormatter):
 
         if options:
             opts = self._deparse_storage_options(options)
-            lines[-1] += f'\nWITH ({opts})'
+            lines[-1] += f'\n{self._kw("WITH")} ({opts})'
 
         if foreign_server:
-            lines.append(f'SERVER {foreign_server}')
+            lines.append(f'{self._kw("SERVER")} {foreign_server}')
 
         if foreign_options:
             opt_lines = self._format_foreign_options(
                 foreign_options,
                 INDENT,
             )
-            lines.append(f'OPTIONS (\n{opt_lines}\n)')
+            lines.append(f'{self._kw("OPTIONS")} (\n{opt_lines}\n)')
 
         return '\n'.join(lines)
 
@@ -361,66 +361,3 @@ class GitLabFormatter(pgfmt.mozilla.MozillaFormatter):
         """Append content with INDENT, handling multi-line."""
         for sub in content.split('\n'):
             lines.append(f'{INDENT}{sub}')
-
-    def _format_where(
-        self,
-        node: dict,
-        lines: list[str],
-    ) -> None:
-        if 'BoolExpr' in node:
-            bool_expr = node['BoolExpr']
-            boolop = bool_expr['boolop']
-            if boolop in ('AND_EXPR', 'OR_EXPR'):
-                op_kw = self._kw(
-                    'AND' if boolop == 'AND_EXPR' else 'OR',
-                )
-                args = self._flatten_bool_expr(node, boolop)
-                lines.append(self._kw('WHERE'))
-                self._append_indented(
-                    self.deparse(args[0]),
-                    lines,
-                )
-                for arg in args[1:]:
-                    self._append_indented(
-                        f'{op_kw} {self.deparse(arg)}',
-                        lines,
-                    )
-                return
-        lines.append(self._kw('WHERE'))
-        self._append_indented(self.deparse(node), lines)
-
-    def _format_having(
-        self,
-        node: dict,
-        lines: list[str],
-    ) -> None:
-        lines.append(self._kw('HAVING'))
-        self._append_indented(self.deparse(node), lines)
-
-    def _format_on(
-        self,
-        node: dict,
-        lines: list[str],
-    ) -> None:
-        if 'BoolExpr' in node:
-            bool_expr = node['BoolExpr']
-            boolop = bool_expr['boolop']
-            if boolop in ('AND_EXPR', 'OR_EXPR'):
-                op_kw = self._kw(
-                    'AND' if boolop == 'AND_EXPR' else 'OR',
-                )
-                args = self._flatten_bool_expr(node, boolop)
-                self._append_indented(
-                    f'{self._kw("ON")} {self.deparse(args[0])}',
-                    lines,
-                )
-                for arg in args[1:]:
-                    self._append_indented(
-                        f'{op_kw} {self.deparse(arg)}',
-                        lines,
-                    )
-                return
-        self._append_indented(
-            f'{self._kw("ON")} {self.deparse(node)}',
-            lines,
-        )

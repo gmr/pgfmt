@@ -249,17 +249,17 @@ class MozillaFormatter(pgfmt.formatter.Formatter):
 
         if options:
             opts = self._deparse_storage_options(options)
-            lines[-1] += f'\nWITH ({opts})'
+            lines[-1] += f'\n{self._kw("WITH")} ({opts})'
 
         if foreign_server:
-            lines.append(f'SERVER {foreign_server}')
+            lines.append(f'{self._kw("SERVER")} {foreign_server}')
 
         if foreign_options:
             opt_lines = self._format_foreign_options(
                 foreign_options,
                 INDENT,
             )
-            lines.append(f'OPTIONS (\n{opt_lines}\n)')
+            lines.append(f'{self._kw("OPTIONS")} (\n{opt_lines}\n)')
 
         return '\n'.join(lines)
 

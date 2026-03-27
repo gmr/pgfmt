@@ -16,13 +16,8 @@ class AWeberFormatter(pgfmt.river.RiverFormatter):
         min_width: int = 0,
     ) -> str:
         with_clause = node.get('withClause')
-        if with_clause and min_width == 0:
-            width = self._unified_river_width(node)
-            return super().format_select(
-                node,
-                indent,
-                min_width=width,
-            )
+        if with_clause:
+            min_width = max(min_width, self._unified_river_width(node))
         return super().format_select(
             node,
             indent,
@@ -41,10 +36,11 @@ class AWeberFormatter(pgfmt.river.RiverFormatter):
                 inner_node,
                 min_width=min_width,
             )
+        scope_width = max(min_width, self._unified_river_width(inner_node))
         with_kw = self._kw('WITH')
         as_kw = self._kw('AS')
-        kw_pad = ' ' * (min_width - len(with_kw))
-        content_col = min_width + 1
+        kw_pad = ' ' * (scope_width - len(with_kw))
+        content_col = scope_width + 1
         close_pad = ' ' * content_col
         nested_ctes = nested_with.get('ctes', [])
         parts = []
@@ -70,7 +66,7 @@ class AWeberFormatter(pgfmt.river.RiverFormatter):
         stripped.pop('withClause', None)
         main_body = self.format_select(
             stripped,
-            min_width=min_width,
+            min_width=scope_width,
         )
         return f'{cte_text}\n{main_body}'
 

@@ -8,7 +8,12 @@ class RiverFormatter(pgfmt.formatter.Formatter):
     creating a visual "river" that separates keywords from content.
     """
 
-    def format_select(self, node: dict, indent: int = 0) -> str:
+    def format_select(
+        self,
+        node: dict,
+        indent: int = 0,
+        min_width: int = 0,
+    ) -> str:
         prefix = ' ' * indent
 
         op = node.get('op', 'SETOP_NONE')
@@ -21,10 +26,12 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         cte_lines = self._format_with_clause(
             node.get('withClause'),
             indent,
+            min_width=min_width,
         )
 
         keywords = self._collect_select_keywords(node)
         width = max(len(k) for k in keywords)
+        width = max(width, min_width)
         lines = []
 
         distinct = self._format_distinct(
@@ -435,6 +442,7 @@ class RiverFormatter(pgfmt.formatter.Formatter):
         self,
         with_clause: dict | None,
         indent: int,
+        min_width: int = 0,
     ) -> str:
         if not with_clause:
             return ''
@@ -445,7 +453,11 @@ class RiverFormatter(pgfmt.formatter.Formatter):
             cte = cte_node['CommonTableExpr']
             name = cte['ctename']
             query = cte['ctequery']
-            inner = self._format_statement(query)
+            inner_node = query.get('SelectStmt', query)
+            inner = self.format_select(
+                inner_node,
+                min_width=min_width,
+            )
             kw = 'WITH' if i == 0 else ''
             comma = ',' if i < len(ctes) - 1 else ''
             if kw:

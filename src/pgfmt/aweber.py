@@ -105,14 +105,26 @@ class AWeberFormatter(pgfmt.river.RiverFormatter):
             w = when['CaseWhen']
             expr = self.deparse(w['expr'])
             result = self.deparse(w['result'])
-            clause = f'{when_kw} {expr} {then_kw} {result}'
+            when_prefix = f'{when_kw} {expr} {then_kw} '
             if i == 0:
-                lines.append(f'{first}{clause}')
+                line_prefix = f'{first}{when_prefix}'
             else:
-                lines.append(f'{pad}{clause}')
+                line_prefix = f'{pad}{when_prefix}'
+            lines.append(
+                self._indent_continuation(
+                    line_prefix,
+                    result,
+                )
+            )
 
         if 'defresult' in node:
-            lines.append(f'{pad}{else_kw} {self.deparse(node["defresult"])}')
+            defresult = self.deparse(node['defresult'])
+            lines.append(
+                self._indent_continuation(
+                    f'{pad}{else_kw} ',
+                    defresult,
+                )
+            )
 
         end_pad = ' ' * (len(case_kw) - len(end_kw))
         lines.append(f'{end_pad}{end_kw}')

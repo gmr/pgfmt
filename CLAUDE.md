@@ -1,35 +1,34 @@
 # pgfmt
 
-A PostgreSQL SQL formatter.
+A PostgreSQL SQL formatter CLI, powered by [libpgfmt](https://crates.io/crates/libpgfmt).
 
 ## Development
 
 ```bash
-uv sync              # Install dependencies
-ci/test              # Run linting + tests with coverage
+just check           # Run formatting, linting, and tests
+just build           # Build debug binary
+just fmt             # Auto-format code
 ```
 
 ## Build System
 
-- **pyproject.toml** with hatchling build backend
-- **uv** for dependency management
-- **dependency-groups** for dev/docs extras
+- **Cargo.toml** with Rust 2024 edition
+- **libpgfmt** for SQL formatting
+- **clap** for CLI argument parsing
 
 ## Testing
 
-- **pytest** as the test runner
-- **coverage** for code coverage reporting
-- Tests live in `tests/`
+- `cargo test` as the test runner
+- Pre-commit hooks run fmt and clippy
 
 ## Code Style
 
-- **ruff** for linting and formatting
-- 79 character line length
-- Single quotes
+- **rustfmt** for formatting
+- **clippy** with `-D warnings`
 - Pre-commit hooks configured
 
-## Key Directories
+## Key Files
 
-- `src/pgfmt/` - Main package
-- `tests/` - Test suite
-- `ci/` - CI scripts
+- `src/main.rs` - CLI binary
+- `justfile` - Build/test/release recipes
+- `install.sh` - curl-based installer

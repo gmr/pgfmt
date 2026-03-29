@@ -12,33 +12,29 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.11", "3.12", "3.13", "3.14"]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: '${{ matrix.python }}'
+          components: clippy, rustfmt
 
-      - name: Lint Check
-        run: uv run pre-commit run --all-files
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
 
       - name: Run tests
-        run: |
-          uv run coverage run
-          uv run coverage report
-          uv run coverage xml
-
-      - name: Upload Coverage
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./build/coverage.xml
-          flags: unittests
+        run: cargo test

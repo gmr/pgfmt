@@ -1,1 +1,0 @@
-INSERT INTO albums (title, release_date) VALUES ('Charcoal Lane', '1990-01-01'), ('The New Danger', '2008-01-01')

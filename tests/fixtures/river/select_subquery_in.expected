@@ -1,6 +1,0 @@
-SELECT r.last_name
-  FROM riders AS r
- WHERE r.last_name IN (SELECT c.last_name
-                         FROM champions AS c
-                        WHERE YEAR(championship_date) > '2008'
-                          AND c.confirmed = 'Y');

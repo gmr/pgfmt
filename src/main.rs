@@ -36,7 +36,7 @@ fn process(name: &str, sql: &str, cli: &Cli) -> Result<bool, String> {
             return Ok(false);
         }
     } else {
-        print!("{formatted}");
+        println!("{formatted}");
     }
     Ok(true)
 }

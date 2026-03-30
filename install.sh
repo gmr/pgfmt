@@ -47,8 +47,11 @@ main() {
     curl -fsSL "$url" | tar xz -C "$tmpdir"
 
     echo "Installing to ${INSTALL_DIR}/${BINARY}..."
-    install -d "$INSTALL_DIR"
-    install "$tmpdir/$BINARY" "$INSTALL_DIR/$BINARY"
+    if [ -w "$INSTALL_DIR" ]; then
+        install "$tmpdir/$BINARY" "$INSTALL_DIR/$BINARY"
+    else
+        sudo install "$tmpdir/$BINARY" "$INSTALL_DIR/$BINARY"
+    fi
 
     echo "${BINARY} ${VERSION} installed to ${INSTALL_DIR}/${BINARY}"
 }

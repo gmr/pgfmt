@@ -1,5 +1,0 @@
-update products
-   set list_price = list_price * 1.05
-     , modified_date = now()
- where sell_end_date is null
-   and sell_start_date is not null;

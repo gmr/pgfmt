@@ -1,3 +1,0 @@
-insert into currencies (code, name, modified_date)
-     values ('XBT', 'Bitcoin', now())
-          , ('ETH', 'Ethereum', now());

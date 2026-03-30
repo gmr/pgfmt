@@ -1,7 +1,0 @@
-CREATE TABLE staff (
-    staff_num INTEGER NOT NULL,
-    first_name TEXT NOT NULL,
-    pens_in_drawer INTEGER NOT NULL,
-    CONSTRAINT pens_in_drawer_range CHECK (pens_in_drawer >= 1 AND pens_in_drawer < 100),
-    PRIMARY KEY (staff_num)
-);

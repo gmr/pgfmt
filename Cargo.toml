@@ -1,0 +1,15 @@
+[package]
+name = "pgfmt"
+version = "1.0.0"
+edition = "2024"
+description = "A PostgreSQL SQL formatter"
+license = "BSD-3-Clause"
+repository = "https://github.com/gmr/pgfmt"
+readme = "README.md"
+keywords = ["postgresql", "sql", "formatter"]
+categories = ["command-line-utilities", "database"]
+authors = ["Gavin M. Roy <gavinmroy@gmail.com>"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+libpgfmt = "1.1"

@@ -1,1 +1,0 @@
-CREATE FOREIGN TABLE fdw_reporting.metrics (account_id integer NOT NULL, total_amount numeric(10,2), avg_amount numeric(10,2), generated_on date NOT NULL) SERVER reporting_server OPTIONS (batch_size '100000', schema_name 'report', table_name 'metrics')

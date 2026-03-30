@@ -1,7 +1,0 @@
-CREATE TABLE mikkoo.audit (
-    message_id   UUID                     NOT NULL,
-    event_id     BIGINT                   NOT NULL,
-    queue        TEXT                     NOT NULL,
-    published_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
-)
-WITH (autovacuum_vacuum_threshold='100', autovacuum_vacuum_scale_factor='0');

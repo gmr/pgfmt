@@ -2,13 +2,16 @@
 set -e
 
 echo '
+FORMATTING
+'
+cargo fmt -- --check
+
+echo '
 LINTING
 '
-uv run pre-commit run --all-files
+cargo clippy -- -D warnings
 
 echo '
 RUNNING TESTS
 '
-uv run coverage run
-uv run coverage report
-uv run coverage xml
+cargo test

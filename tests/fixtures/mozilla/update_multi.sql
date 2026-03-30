@@ -1,1 +1,0 @@
-UPDATE albums SET release_date = '1990-01-01', title = 'test' WHERE id = 1

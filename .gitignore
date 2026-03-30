@@ -1,17 +1,3 @@
-*.egg
-*.egg-info
-*.pyc
-*.pyo
-.coverage
-.env
-.idea
-.mypy_cache
-.ruff_cache
-.venv
-.vscode
-bak/
-build/
-dist/
-env/
-site/
-guides/sqlfmt.html
+# Rust
+/target
+Cargo.lock

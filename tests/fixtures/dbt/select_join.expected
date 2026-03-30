@@ -1,8 +1,0 @@
-select r.last_name
-
-from
-    riders as r
-inner join
-    bikes as b
-    on r.bike_vin_num = b.vin_num
-    and b.engines > 2;

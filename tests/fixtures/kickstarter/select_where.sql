@@ -1,1 +1,0 @@
-SELECT id, name, status FROM app.projects WHERE country = 'US' AND deadline >= '2015-01-01' AND state = 'live' ORDER BY deadline

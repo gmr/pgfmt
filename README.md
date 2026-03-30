@@ -2,22 +2,45 @@
 
 A PostgreSQL SQL formatter with multiple style options.
 
-[![Version](https://img.shields.io/pypi/v/pgfmt.svg?)](https://pypi.org/project/pgfmt)
 [![Testing](https://github.com/gmr/pgfmt/actions/workflows/testing.yaml/badge.svg)](https://github.com/gmr/pgfmt/actions/workflows/testing.yaml)
-[![Coverage](https://codecov.io/gh/gmr/pgfmt/branch/main/graph/badge.svg)](https://codecov.io/github/gmr/pgfmt?branch=main)
-[![License](https://img.shields.io/pypi/l/pgfmt.svg?)](https://github.com/gmr/pgfmt/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/gmr/pgfmt)](https://github.com/gmr/pgfmt/blob/main/LICENSE)
 
-pgfmt parses SQL using [pgparse](https://github.com/gmr/pgparse) (PostgreSQL's
-own parser via libpg_query) and reformats it according to one of several
-well-known style guides.
+pgfmt parses SQL using [tree-sitter-postgres](https://github.com/nicholasgasior/tree-sitter-postgres)
+and reformats it according to one of several well-known style guides.
+Formatting is powered by [libpgfmt](https://crates.io/crates/libpgfmt).
 
 ## Installation
 
+### Quick Install (Linux / macOS)
+
 ```bash
-pip install pgfmt
+curl -fsSL https://raw.githubusercontent.com/gmr/pgfmt/main/install.sh | sh
 ```
 
-## CLI Usage
+To install to a custom directory:
+
+```bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/gmr/pgfmt/main/install.sh | sh
+```
+
+### Install a Specific Version
+
+```bash
+VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/gmr/pgfmt/main/install.sh | sh
+```
+
+### From Source (via Cargo)
+
+```bash
+cargo install pgfmt
+```
+
+### Download Binaries
+
+Pre-built binaries for Linux and macOS (x86_64 and aarch64) are available on
+the [GitHub Releases](https://github.com/gmr/pgfmt/releases) page.
+
+## Usage
 
 ```bash
 # Format a file (default: river style)
@@ -34,22 +57,17 @@ pgfmt --style dbt query.sql
 pgfmt --check query.sql
 ```
 
-## Library Usage
-
-```python
-import pgfmt
-
-sql = "SELECT a, b FROM my_table WHERE x = 1 AND y = 2"
-
-# Default (river) style
-print(pgfmt.format(sql))
-
-# Choose a style
-print(pgfmt.format(sql, style='mozilla'))
-print(pgfmt.format(sql, style='dbt'))
-```
-
 ## Styles
+
+| Style | Based On |
+|-------|----------|
+| aweber | [AWeber SQL Style Guide](guides/aweber.md) |
+| dbt | [How we style our SQL](https://docs.getdbt.com/best-practices/how-we-style/2-how-we-style-our-sql) by dbt Labs |
+| gitlab | [GitLab SQL Style Guide](https://handbook.gitlab.com/handbook/enterprise-data/platform/sql-style-guide/) |
+| kickstarter | [Kickstarter SQL Style Guide](https://gist.github.com/fredbenenson/7bb92718e19138c20591) by Fred Benenson |
+| mattmc3 | [Modern SQL Style Guide](https://gist.github.com/mattmc3/38a85e6a4ca1093816c08d4815fbebfb) by mattmc3 |
+| mozilla | [Mozilla SQL Style Guide](https://docs.telemetry.mozilla.org/concepts/sql_style) |
+| river (default) | [SQL Style Guide](https://www.sqlstyle.guide/) by Simon Holywell |
 
 ### river (default)
 
@@ -145,7 +163,7 @@ WHERE
 
 ### mattmc3
 
-Based on the [Modern SQL Style Guide](https://github.com/mattmc3/sql-style-guide)
+Based on the [Modern SQL Style Guide](https://gist.github.com/mattmc3/38a85e6a4ca1093816c08d4815fbebfb)
 by mattmc3. Lowercase river-style with leading commas. Uses plain `join`
 instead of `inner join`.
 

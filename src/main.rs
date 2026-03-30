@@ -13,7 +13,7 @@ struct Cli {
     files: Vec<PathBuf>,
 
     /// Formatting style
-    #[arg(long, default_value = "river")]
+    #[arg(long, default_value = "aweber")]
     style: Style,
 
     /// Check if files are already formatted (exit 1 if not)

@@ -59,6 +59,16 @@ pgfmt --check query.sql
 
 ## Styles
 
+| Style | Based On |
+|-------|----------|
+| aweber | [AWeber SQL Style Guide](guides/aweber.md) |
+| dbt | [How we style our SQL](https://docs.getdbt.com/best-practices/how-we-style/2-how-we-style-our-sql) by dbt Labs |
+| gitlab | [GitLab SQL Style Guide](https://handbook.gitlab.com/handbook/enterprise-data/platform/sql-style-guide/) |
+| kickstarter | [Kickstarter SQL Style Guide](https://gist.github.com/fredbenenson/7bb92718e19138c20591) by Fred Benenson |
+| mattmc3 | [Modern SQL Style Guide](https://gist.github.com/mattmc3/38a85e6a4ca1093816c08d4815fbebfb) by mattmc3 |
+| mozilla | [Mozilla SQL Style Guide](https://docs.telemetry.mozilla.org/concepts/sql_style) |
+| river (default) | [SQL Style Guide](https://www.sqlstyle.guide/) by Simon Holywell |
+
 ### river (default)
 
 Based on [sqlstyle.guide](https://www.sqlstyle.guide/) by Simon Holywell.
@@ -153,7 +163,7 @@ WHERE
 
 ### mattmc3
 
-Based on the [Modern SQL Style Guide](https://github.com/mattmc3/sql-style-guide)
+Based on the [Modern SQL Style Guide](https://gist.github.com/mattmc3/38a85e6a4ca1093816c08d4815fbebfb)
 by mattmc3. Lowercase river-style with leading commas. Uses plain `join`
 instead of `inner join`.
 

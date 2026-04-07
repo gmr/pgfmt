@@ -19,13 +19,17 @@ struct Cli {
     /// Check if files are already formatted (exit 1 if not)
     #[arg(long)]
     check: bool,
+
+    /// Format files in place
+    #[arg(short, long = "inplace", conflicts_with = "check")]
+    inplace: bool,
 }
 
 fn format_sql(sql: &str, style: Style) -> Result<String, String> {
     libpgfmt::format(sql, style).map_err(|e| e.to_string())
 }
 
-fn process(name: &str, sql: &str, cli: &Cli) -> Result<bool, String> {
+fn process(name: &str, sql: &str, path: Option<&PathBuf>, cli: &Cli) -> Result<bool, String> {
     if sql.trim().is_empty() {
         return Ok(true);
     }
@@ -35,6 +39,9 @@ fn process(name: &str, sql: &str, cli: &Cli) -> Result<bool, String> {
             eprintln!("Would reformat: {name}");
             return Ok(false);
         }
+    } else if cli.inplace {
+        let path = path.ok_or_else(|| "cannot use --inplace with stdin".to_string())?;
+        fs::write(path, &formatted).map_err(|e| format!("{name}: {e}"))?;
     } else {
         println!("{formatted}");
     }
@@ -43,6 +50,11 @@ fn process(name: &str, sql: &str, cli: &Cli) -> Result<bool, String> {
 
 fn run() -> Result<ExitCode, String> {
     let cli = Cli::parse();
+
+    if cli.inplace && cli.files.is_empty() {
+        return Err("--inplace requires at least one file".to_string());
+    }
+
     let mut all_ok = true;
 
     if cli.files.is_empty() {
@@ -53,14 +65,14 @@ fn run() -> Result<ExitCode, String> {
         io::stdin()
             .read_to_string(&mut sql)
             .map_err(|e| e.to_string())?;
-        if !process("<stdin>", &sql, &cli)? {
+        if !process("<stdin>", &sql, None, &cli)? {
             all_ok = false;
         }
     } else {
         for path in &cli.files {
             let sql = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
             let name = path.display().to_string();
-            if !process(&name, &sql, &cli)? {
+            if !process(&name, &sql, Some(path), &cli)? {
                 all_ok = false;
             }
         }

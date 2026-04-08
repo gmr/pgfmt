@@ -41,7 +41,11 @@ fn process(name: &str, sql: &str, path: Option<&PathBuf>, cli: &Cli) -> Result<b
         }
     } else if cli.inplace {
         let path = path.ok_or_else(|| "cannot use --inplace with stdin".to_string())?;
+        let permissions = fs::metadata(path)
+            .map_err(|e| format!("{name}: {e}"))?
+            .permissions();
         fs::write(path, &formatted).map_err(|e| format!("{name}: {e}"))?;
+        fs::set_permissions(path, permissions).map_err(|e| format!("{name}: {e}"))?;
     } else {
         println!("{formatted}");
     }

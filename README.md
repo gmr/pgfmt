@@ -11,6 +11,13 @@ Formatting is powered by [libpgfmt](https://crates.io/crates/libpgfmt).
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap gmr/pgfmt
+brew install pgfmt
+```
+
 ### Quick Install (Linux / macOS)
 
 ```bash

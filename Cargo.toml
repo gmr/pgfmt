@@ -12,4 +12,4 @@ authors = ["Gavin M. Roy <gavinmroy@gmail.com>"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-libpgfmt = "1.1"
+libpgfmt = "1.1.1"

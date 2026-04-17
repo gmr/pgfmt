@@ -54,3 +54,54 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: pgfmt-${{ matrix.target }}.tar.gz
+
+  update-homebrew:
+    name: Update Homebrew formula
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets and compute checksums
+        id: checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
+            url="https://github.com/gmr/pgfmt/releases/download/${GITHUB_REF_NAME}/pgfmt-${target}.tar.gz"
+            curl -fsSL -o "pgfmt-${target}.tar.gz" "$url"
+            sha=$(sha256sum "pgfmt-${target}.tar.gz" | cut -d' ' -f1)
+            key=$(echo "${target}" | tr '-' '_')
+            echo "${key}=${sha}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v5
+        with:
+          repository: gmr/homebrew-pgfmt
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA_AARCH64_APPLE: ${{ steps.checksums.outputs.aarch64_apple_darwin }}
+          SHA_X86_64_APPLE: ${{ steps.checksums.outputs.x86_64_apple_darwin }}
+          SHA_AARCH64_LINUX: ${{ steps.checksums.outputs.aarch64_unknown_linux_gnu }}
+          SHA_X86_64_LINUX: ${{ steps.checksums.outputs.x86_64_unknown_linux_gnu }}
+        run: |
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/pgfmt.rb
+          sed -i "s|download/v[^/]*/|download/v${VERSION}/|g" Formula/pgfmt.rb
+          sed -i "/aarch64-apple-darwin/{n;s/sha256 \".*\"/sha256 \"${SHA_AARCH64_APPLE}\"/;}" Formula/pgfmt.rb
+          sed -i "/x86_64-apple-darwin/{n;s/sha256 \".*\"/sha256 \"${SHA_X86_64_APPLE}\"/;}" Formula/pgfmt.rb
+          sed -i "/aarch64-unknown-linux-gnu/{n;s/sha256 \".*\"/sha256 \"${SHA_AARCH64_LINUX}\"/;}" Formula/pgfmt.rb
+          sed -i "/x86_64-unknown-linux-gnu/{n;s/sha256 \".*\"/sha256 \"${SHA_X86_64_LINUX}\"/;}" Formula/pgfmt.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/pgfmt.rb
+          git commit -m "Update pgfmt to ${{ steps.version.outputs.version }}"
+          git push

@@ -18,6 +18,19 @@ brew tap gmr/pgfmt
 brew install pgfmt
 ```
 
+> [!NOTE]
+> Homebrew 6.0 added [tap trust](https://docs.brew.sh/Tap-Trust), and some
+> versions fail to install third-party taps inside the build sandbox (the
+> error mentions `build.rb ... exited with 1`). If you hit this, trust the
+> formula first:
+>
+> ```bash
+> brew trust --formula gmr/pgfmt/pgfmt
+> ```
+>
+> or, as a temporary workaround, set `HOMEBREW_NO_REQUIRE_TAP_TRUST=1` for
+> the install.
+
 ### Quick Install (Linux / macOS)
 
 ```bash

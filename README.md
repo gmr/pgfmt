@@ -14,7 +14,7 @@ Formatting is powered by [libpgfmt](https://crates.io/crates/libpgfmt).
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap gmr/gmr
+brew tap gmr/postgres
 brew install pgfmt
 ```
 
@@ -25,7 +25,7 @@ brew install pgfmt
 > formula first:
 >
 > ```bash
-> brew trust --formula gmr/gmr/pgfmt
+> brew trust --formula gmr/postgres/pgfmt
 > ```
 >
 > or, as a temporary workaround, set `HOMEBREW_NO_REQUIRE_TAP_TRUST=1` for

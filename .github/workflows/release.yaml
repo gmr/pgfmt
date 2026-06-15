@@ -80,7 +80,7 @@ jobs:
       - name: Checkout homebrew tap
         uses: actions/checkout@v5
         with:
-          repository: gmr/homebrew-pgfmt
+          repository: gmr/homebrew-postgres
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Update formula

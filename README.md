@@ -5,9 +5,10 @@ A PostgreSQL SQL formatter with multiple style options.
 [![Testing](https://github.com/gmr/pgfmt/actions/workflows/testing.yaml/badge.svg)](https://github.com/gmr/pgfmt/actions/workflows/testing.yaml)
 [![License](https://img.shields.io/github/license/gmr/pgfmt)](https://github.com/gmr/pgfmt/blob/main/LICENSE)
 
-pgfmt parses SQL using [tree-sitter-postgres](https://github.com/nicholasgasior/tree-sitter-postgres)
-and reformats it according to one of several well-known style guides.
-Formatting is powered by [libpgfmt](https://crates.io/crates/libpgfmt).
+pgfmt is a small command-line wrapper around
+[libpgfmt](https://crates.io/crates/libpgfmt), a Rust library that parses SQL
+with [tree-sitter-postgres](https://crates.io/crates/tree-sitter-postgres) and
+reformats it according to one of several well-known style guides.
 
 ## Installation
 
@@ -73,6 +74,9 @@ echo "SELECT a,b FROM t WHERE x=1" | pgfmt
 pgfmt --style mozilla query.sql
 pgfmt --style dbt query.sql
 
+# Round-trip pg_dump / pg_get_viewdef output
+pg_dump --schema-only mydb | pgfmt --style pg_dump
+
 # Check if already formatted (exit 1 if not)
 pgfmt --check query.sql
 ```
@@ -87,6 +91,7 @@ pgfmt --check query.sql
 | kickstarter | [Kickstarter SQL Style Guide](https://gist.github.com/fredbenenson/7bb92718e19138c20591) by Fred Benenson |
 | mattmc3 | [Modern SQL Style Guide](https://gist.github.com/mattmc3/38a85e6a4ca1093816c08d4815fbebfb) by mattmc3 |
 | mozilla | [Mozilla SQL Style Guide](https://docs.telemetry.mozilla.org/concepts/sql_style) |
+| pg_dump | PostgreSQL's built-in `ruleutils.c` deparser (`pg_dump` / `pg_get_viewdef`) |
 | river | [SQL Style Guide](https://www.sqlstyle.guide/) by Simon Holywell |
 
 ### aweber (default)
@@ -181,6 +186,26 @@ FROM albums AS a
 WHERE
     a.title = 'Charcoal Lane'
     OR a.title = 'The New Danger';
+```
+
+### pg_dump
+
+Mimics PostgreSQL's internal `ruleutils.c` deparser — the layout emitted by
+`pg_dump`, `pg_get_viewdef`, and `pg_get_functiondef`. Uppercase keywords,
+leading-space indentation, lowercase built-in functions. The correctness bar
+is byte-identical round-tripping of genuine deparser output. Also accepts
+`pgdump` and `postgres` as aliases.
+
+```sql
+ SELECT u.email,
+    count(*) AS n,
+    sum(o.total) AS revenue
+   FROM app.users u
+     JOIN app.orders o ON o.user_id = u.id
+  WHERE o.placed_at > (now() - '30 days'::interval)
+  GROUP BY u.email
+ HAVING sum(o.total) > 100::numeric
+  ORDER BY (sum(o.total)) DESC;
 ```
 
 ### river

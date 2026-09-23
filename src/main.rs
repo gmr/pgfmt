@@ -8,7 +8,7 @@ use libpgfmt::error::FormatError;
 use libpgfmt::style::Style;
 
 #[derive(Parser)]
-#[command(name = "pgfmt", about = "Format PostgreSQL SQL statements")]
+#[command(name = "pgfmt", version, about = "Format PostgreSQL SQL statements")]
 struct Cli {
     /// SQL files to format (reads stdin if none given)
     files: Vec<PathBuf>,

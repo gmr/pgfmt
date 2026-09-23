@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
+use libpgfmt::error::FormatError;
 use libpgfmt::style::Style;
 
 #[derive(Parser)]
@@ -26,14 +27,25 @@ struct Cli {
 }
 
 fn format_sql(sql: &str, style: Style) -> Result<String, String> {
-    libpgfmt::format(sql, style).map_err(|e| e.to_string())
+    libpgfmt::format(sql, style).map_err(|e| match e {
+        // The inner message is already prefixed with "Syntax error at ...".
+        FormatError::Syntax(msg) => msg,
+        other => other.to_string(),
+    })
 }
 
 fn process(name: &str, sql: &str, path: Option<&PathBuf>, cli: &Cli) -> Result<bool, String> {
     if sql.trim().is_empty() {
         return Ok(true);
     }
-    let formatted = format_sql(sql, cli.style)?;
+    let formatted = match format_sql(sql, cli.style) {
+        Ok(formatted) => formatted,
+        // A file that will not parse is a failure of that file, not of the run.
+        Err(msg) => {
+            eprintln!("{name}: {msg}");
+            return Ok(false);
+        }
+    };
     if cli.check {
         if formatted.trim() != sql.trim() {
             eprintln!("Would reformat: {name}");
@@ -96,5 +108,16 @@ fn main() -> ExitCode {
             eprintln!("pgfmt: {msg}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn syntax_error_is_not_double_prefixed() {
+        let err = format_sql("1 SELECT random();", Style::default()).unwrap_err();
+        assert!(err.starts_with("Syntax error at "), "{err}");
     }
 }

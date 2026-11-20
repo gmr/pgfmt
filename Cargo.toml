@@ -1,6 +1,6 @@
 [package]
 name = "pgfmt"
-version = "2.3.3"
+version = "2.3.4"
 edition = "2024"
 rust-version = "1.96"
 description = "A PostgreSQL SQL formatter"
@@ -13,4 +13,4 @@ authors = ["Gavin M. Roy <gavinmroy@gmail.com>"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-libpgfmt = "1.5.2"
+libpgfmt = "1.5.3"

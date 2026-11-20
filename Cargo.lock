@@ -165,9 +165,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "libpgfmt"
-version = "1.5.1"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5259233857ac18a0dee4b33ea292ffc37a586d41988f3c175f268e7d79364dc"
+checksum = "5a01338c44d8850987df81e137e30cee0ae759ae680335bbcb68b7fc54e2a164"
 dependencies = [
  "tree-sitter",
  "tree-sitter-postgres",
